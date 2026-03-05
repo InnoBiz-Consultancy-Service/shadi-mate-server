@@ -1,0 +1,96 @@
+import bcrypt from "bcryptjs";
+import { model, Schema } from "mongoose";
+import { IOtp, IUser } from "./user.interface";
+
+// ─── User Schema ─────────────────────────────────────────────────────────────
+
+const UserSchema = new Schema<IUser>(
+    {
+        name: {
+            type: String,
+            required: [true, "Name is required"],
+            trim: true,
+        },
+        email: {
+            type: String,
+            required: [true, "Email is required"],
+            unique: true,
+            lowercase: true,
+            trim: true,
+        },
+        phone: {
+            type: String,
+            required: [true, "Phone number is required"],
+            unique: true,
+            trim: true,
+        },
+        password: {
+            type: String,
+            required: [true, "Password is required"],
+            minlength: [6, "Password must be at least 6 characters"],
+            select: false,
+        },
+        role: {
+            type: String,
+            enum: ["user", "admin"],
+            default: "user",
+        },
+        isVerified: {
+            type: Boolean,
+            default: false,
+        },
+        isDeleted: {
+            type: Boolean,
+            default: false,
+        },
+        isBlocked: {
+            type: Boolean,
+            default: false,
+        },
+    },
+    { timestamps: true }
+);
+
+// Hash password before saving
+UserSchema.pre("save", async function (next) {
+    if (!this.isModified("password")) return next();
+    const salt = await bcrypt.genSalt(12);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+});
+
+// Compare password method
+UserSchema.methods.comparePassword = async function (
+    candidatePassword: string
+): Promise<boolean> {
+    return bcrypt.compare(candidatePassword, this.password);
+};
+
+
+
+UserSchema.pre("save", function (next) {
+    this.isDeleted = false;
+    next();
+});
+
+export const User = model<IUser>("User", UserSchema);
+
+// ─── OTP Schema ──────────────────────────────────────────────────────────────
+
+const OtpSchema = new Schema<IOtp>({
+    phone: {
+        type: String,
+        required: true,
+    },
+    otp: {
+        type: String,
+        required: true,
+    },
+    expiresAt: {
+        type: Date,
+        required: true,
+        index: { expires: 0 }, // TTL: document auto-deleted when expiresAt passes
+    },
+});
+
+export const Otp = model<IOtp>("Otp", OtpSchema);
