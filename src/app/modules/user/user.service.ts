@@ -146,15 +146,14 @@ const loginUser = async (payload: TLoginInput) => {
 
 const getMe = async (userId: string) => {
     const user = await User.findById(userId).select("-password");
-    const getUser = await User.findById(userId);
-    if (!getUser) {
+    if (!user) {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
-    if (getUser.isDeleted) {
+    if (user.isDeleted) {
         throw new AppError(StatusCodes.FORBIDDEN, "Account has been deleted");
     }
 
-    if (getUser.isBlocked) {
+    if (user.isBlocked) {
         throw new AppError(StatusCodes.FORBIDDEN, "Your account has been blocked");
     }
     return user;

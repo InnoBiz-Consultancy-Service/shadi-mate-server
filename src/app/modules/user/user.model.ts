@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { model, Schema } from "mongoose";
-import { IOtp, IUser } from "./user.interface";
+import { IOtp, IUser, TGender, TUserRole } from "./user.interface";
 
 // ─── User Schema ─────────────────────────────────────────────────────────────
 
@@ -32,8 +32,8 @@ const UserSchema = new Schema<IUser>(
         },
         role: {
             type: String,
-            enum: ["user", "admin"],
-            default: "user",
+            enum: TUserRole,
+            default: TUserRole.USER,
         },
         isVerified: {
             type: Boolean,
@@ -46,6 +46,11 @@ const UserSchema = new Schema<IUser>(
         isBlocked: {
             type: Boolean,
             default: false,
+        },
+        gender: {
+            type: String,
+            enum: TGender,
+            required: [true, "Gender is required"],
         },
     },
     { timestamps: true }

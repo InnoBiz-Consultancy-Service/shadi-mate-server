@@ -2,7 +2,15 @@ import { Document, Types } from "mongoose";
 
 // ─── User ────────────────────────────────────────────────────────────────────
 
-export type TUserRole = "user" | "admin";
+export enum TUserRole {
+    USER = "user",
+    ADMIN = "admin",
+}
+export enum TGender {
+    MALE = "male",
+    FEMALE = "female",
+    OTHER = "other",
+}
 
 export interface IUser extends Document {
     _id: Types.ObjectId;
@@ -10,6 +18,7 @@ export interface IUser extends Document {
     email: string;
     phone: string;
     password: string;
+    gender: TGender;
     role: TUserRole;
     isVerified: boolean;
     createdAt: Date;
