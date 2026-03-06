@@ -14,7 +14,6 @@ const register = catchAsync(async (req: Request, res: Response) => {
         success: true,
         message: result.message,
         data: {
-            userId: result.userId,
             phone: result.phone,
             otp: result.otp, // 🔴 DEVELOPMENT ONLY — remove in production
         },

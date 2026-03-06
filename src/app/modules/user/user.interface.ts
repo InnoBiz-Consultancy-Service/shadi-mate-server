@@ -30,8 +30,17 @@ export interface IUser extends Document {
 
 // ─── OTP ─────────────────────────────────────────────────────────────────────
 
+export interface IOtpUserData {
+    name: string;
+    email: string;
+    phone: string;
+    password: string; // already hashed
+    gender: TGender;
+}
+
 export interface IOtp extends Document {
     phone: string;
     otp: string;
     expiresAt: Date;
+    userData: IOtpUserData;
 }

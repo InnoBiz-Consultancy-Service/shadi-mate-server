@@ -1,94 +1,128 @@
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import AppError from "../../../helpers/AppError";
 import { StatusCodes } from "http-status-codes";
-import { Otp, User } from "./user.model";
-import { TLoginInput, TRegisterInput, TVerifyOtpInput } from "./user.validation";
-import { envVars } from "../../../config/envConfig";
+import AppError from "../../../helpers/AppError";
+import { User, Otp } from "./user.model";
 import { IUser } from "./user.interface";
+import { TRegisterInput, TVerifyOtpInput, TLoginInput } from "./user.validation";
+import { envVars } from "../../../config/envConfig";
 
-// ─── Helper: generate 6-digit OTP ────────────────────────────────────────────
+// ─── Helper: Generate 6-digit OTP ─────────────────────────────────────────────
 
-const generateOtp = (): string => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-};
+const generateOtp = (): string =>
+    Math.floor(100000 + Math.random() * 900000).toString();
 
-// ─── Register ────────────────────────────────────────────────────────────────
+const OTP_EXPIRY_MINUTES = 5;
+
+// ─── Register ─────────────────────────────────────────────────────────────────
+
 
 const registerUser = async (payload: TRegisterInput) => {
-    const { name, email, phone, password } = payload;
+    const { name, email, phone, password, gender } = payload;
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
+    // 1️⃣ User ও pending OTP একসাথে parallel এ check করো — 2টা query একই time এ চলবে
+    const [existingUser, existingOtp] = await Promise.all([
+        User.findOne({ phone }, "_id").lean(),
+        Otp.findOne({ phone }, "_id").lean(),
+    ]);
+
     if (existingUser) {
-        if (existingUser.email === email) {
-            throw new AppError(StatusCodes.CONFLICT, "Email already registered");
-        }
-        if (existingUser.phone === phone) {
-            throw new AppError(StatusCodes.CONFLICT, "Phone number already registered");
-        }
+        throw new AppError(StatusCodes.CONFLICT, "Phone number already registered");
+    }
+    if (existingOtp) {
+        throw new AppError(
+            StatusCodes.CONFLICT,
+            "OTP already sent to this number. Please verify or use resend-otp"
+        );
     }
 
-    // Create user (not yet verified)
-    const user = await User.create({ name, email, phone, password });
+    const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Generate OTP and save
-    const otpCode = generateOtp();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    const otp = generateOtp();
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
-    // Delete any existing OTP for this phone
-    await Otp.deleteMany({ phone });
-
-    await Otp.create({ phone, otp: otpCode, expiresAt });
-
-    // TODO: Replace with real SMS gateway (e.g. Twilio, SSLCommerz notif)
-    // await sendSms(phone, `Your Shadi Mate OTP is: ${otpCode}`);
+    await Otp.create({
+        phone,
+        otp,
+        expiresAt,
+        userData: { name, email, phone, password: hashedPassword, gender },
+    });
 
     return {
-        userId: user._id,
-        phone: user.phone,
-        message: "OTP sent to phone number (mock mode — OTP returned in response)",
-        // 🔴 DEVELOPMENT ONLY — remove in production:
-        otp: otpCode,
+        message: "OTP sent successfully. Please verify your phone number.",
+        phone,
+        otp,
     };
 };
 
-// ─── Verify OTP ──────────────────────────────────────────────────────────────
+// ─── Verify OTP ───────────────────────────────────────────────────────────────
 
 const verifyOtp = async (payload: TVerifyOtpInput) => {
     const { phone, otp } = payload;
 
-    const otpRecord = await Otp.findOne({ phone });
-
-    if (!otpRecord) {
-        throw new AppError(StatusCodes.BAD_REQUEST, "OTP not found or already expired");
+    const otpDoc = await Otp.findOne({ phone });
+    if (!otpDoc) {
+        throw new AppError(
+            StatusCodes.NOT_FOUND,
+            "No pending registration found for this phone number"
+        );
     }
 
-    if (otpRecord.otp !== otp) {
-        throw new AppError(StatusCodes.BAD_REQUEST, "Invalid OTP");
+    // 2️⃣ Expired?
+    if (otpDoc.expiresAt < new Date()) {
+        throw new AppError(
+            StatusCodes.GONE,
+            "OTP has expired. Please register again or use resend-otp"
+        );
     }
 
-    if (otpRecord.expiresAt < new Date()) {
-        await Otp.deleteOne({ phone });
-        throw new AppError(StatusCodes.BAD_REQUEST, "OTP has expired. Please request a new one");
+    if (otpDoc.otp !== otp) {
+        throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid OTP");
     }
 
-    // Mark user as verified
-    const user = await User.findOneAndUpdate(
-        { phone },
-        { isVerified: true },
-        { new: true, select: "-password" }
-    );
-
-    if (!user) {
-        throw new AppError(StatusCodes.NOT_FOUND, "User not found");
-    }
-
-    // Delete used OTP
-    await Otp.deleteOne({ phone });
+    // OTP valid — User create ও OTP delete একসাথে parallel এ চলবে
+    const [user] = await Promise.all([
+        User.create({ ...otpDoc.userData, isVerified: true }),
+        Otp.deleteOne({ _id: otpDoc._id }), // _id দিয়ে delete → index hit, fastest
+    ]);
 
     return {
-        message: "Phone number verified successfully",
-        user,
+        message: "Phone verified successfully. Account created!",
+        user: {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            gender: user.gender,
+            role: user.role,
+            isVerified: user.isVerified,
+        },
+    };
+};
+
+// ─── Resend OTP ───────────────────────────────────────────────────────────────
+
+const resendOtp = async (phone: string) => {
+    const newOtp = generateOtp();
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+
+    const updated = await Otp.findOneAndUpdate(
+        { phone },
+        { otp: newOtp, expiresAt },
+        { new: true }
+    );
+
+    if (!updated) {
+        throw new AppError(
+            StatusCodes.NOT_FOUND,
+            "No pending registration found for this phone number. Please register first"
+        );
+    }
+
+    return {
+        message: "OTP resent successfully.",
+        otp: newOtp, // 🔴 DEVELOPMENT ONLY
     };
 };
 
@@ -97,35 +131,29 @@ const verifyOtp = async (payload: TVerifyOtpInput) => {
 const loginUser = async (payload: TLoginInput) => {
     const { phone, password } = payload;
 
-    // Find user and include password for comparison
-    const user = await User.findOne({ phone }).select("+password");
-
+    const user = await User.findOne({ phone, isDeleted: false }).select("+password");
     if (!user) {
-        throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid phone number or password");
+        throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid phone or password");
     }
+
     if (user.isBlocked) {
-        throw new AppError(
-            StatusCodes.FORBIDDEN,
-            "Your account has been blocked by admin"
-        );
+        throw new AppError(StatusCodes.FORBIDDEN, "Your account has been blocked");
     }
+
     if (!user.isVerified) {
-        throw new AppError(
-            StatusCodes.FORBIDDEN,
-            "Account not verified. Please verify your phone number first"
-        );
+        throw new AppError(StatusCodes.FORBIDDEN, "Please verify your phone number first");
     }
 
-    const isPasswordCorrect = await user.comparePassword(password);
-    if (!isPasswordCorrect) {
-        throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid phone number or password");
+    // 2️⃣ Password check
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+        throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid phone or password");
     }
 
-    // Sign JWT
     const token = jwt.sign(
         { id: user._id, phone: user.phone, role: user.role },
         envVars.JWT_SECRET,
-        { expiresIn: envVars.JWT_EXPIRES_IN } as jwt.SignOptions
+        { expiresIn: envVars.JWT_EXPIRES_IN as `${number}${'s' | 'm' | 'h' | 'd'}` }
     );
 
     return {
@@ -136,6 +164,7 @@ const loginUser = async (payload: TLoginInput) => {
             name: user.name,
             email: user.email,
             phone: user.phone,
+            gender: user.gender,
             role: user.role,
             isVerified: user.isVerified,
         },
@@ -145,131 +174,79 @@ const loginUser = async (payload: TLoginInput) => {
 // ─── Get Me ───────────────────────────────────────────────────────────────────
 
 const getMe = async (userId: string) => {
-    const user = await User.findById(userId).select("-password");
+    const user = await User.findById(userId).lean();
     if (!user) {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
-    }
-    if (user.isDeleted) {
-        throw new AppError(StatusCodes.FORBIDDEN, "Account has been deleted");
-    }
-
-    if (user.isBlocked) {
-        throw new AppError(StatusCodes.FORBIDDEN, "Your account has been blocked");
     }
     return user;
 };
 
-// ─── Resend OTP ───────────────────────────────────────────────────────────────
+// ─── Update User ──────────────────────────────────────────────────────────────
 
-const resendOtp = async (phone: string) => {
-    const user = await User.findOne({ phone });
-    if (!user) {
-        throw new AppError(StatusCodes.NOT_FOUND, "No user found with this phone number");
-    }
-    if (user.isVerified) {
-        throw new AppError(StatusCodes.BAD_REQUEST, "This account is already verified");
-    }
-
-    const otpCode = generateOtp();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-
-    await Otp.deleteMany({ phone });
-    await Otp.create({ phone, otp: otpCode, expiresAt });
-
-    return {
-        message: "OTP resent to phone number (mock mode — OTP returned in response)",
-        otp: otpCode, // 🔴 DEVELOPMENT ONLY
-    };
-};
 const updateUser = async (userId: string, payload: Partial<IUser>) => {
-    const getUser = await User.findById(userId);
-    if (!getUser) {
-        throw new AppError(StatusCodes.NOT_FOUND, "User not found");
-    }
-    if (getUser.isDeleted) {
-        throw new AppError(StatusCodes.FORBIDDEN, "Account has been deleted");
-    }
-
-    if (getUser.isBlocked) {
-        throw new AppError(StatusCodes.FORBIDDEN, "Your account has been blocked by admin");
-    }
-    const user = await User.findByIdAndUpdate(
-        userId,
-        payload,
-        { new: true, runValidators: true, select: "-password" }
-    );
-
+    const user = await User.findByIdAndUpdate(userId, payload, {
+        new: true,
+        runValidators: true,
+    }).lean();
     if (!user) {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
-
     return user;
 };
+
+// ─── Delete User (Soft Delete) ───────────────────────────────────────────────
+
 const deleteUser = async (
     userId: string,
     requestUser: { id: string; role: string }
 ) => {
-    const user = await User.findById(userId);
+    if (requestUser.role !== "admin" && requestUser.id !== userId) {
+        throw new AppError(StatusCodes.FORBIDDEN, "You can only delete your own account");
+    }
 
+    const user = await User.findByIdAndUpdate(
+        userId,
+        { isDeleted: true },
+        { new: true }
+    );
     if (!user) {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
-
-    if (user.isDeleted) {
-        throw new AppError(StatusCodes.BAD_REQUEST, "User already deleted");
-    }
-
-    // 🔐 Permission Logic
-    if (requestUser.role !== "admin" && requestUser.id !== userId) {
-        throw new AppError(
-            StatusCodes.FORBIDDEN,
-            "You can only delete your own account"
-        );
-    }
-
-    user.isDeleted = true;
-    await user.save();
-
-    return null;
+    return user;
 };
+
+// ─── Update Block Status ──────────────────────────────────────────────────────
+
 const updateBlockStatus = async (
     userId: string,
     isBlocked: boolean,
-    requestUser: { role: string }
+    requestUser: { id: string; role: string }
 ) => {
     if (requestUser.role !== "admin") {
-        throw new AppError(
-            StatusCodes.FORBIDDEN,
-            "Only admin can block or unblock users"
-        );
+        throw new AppError(StatusCodes.FORBIDDEN, "Only admins can block/unblock users");
     }
 
-    const user = await User.findById(userId);
-
+    const user = await User.findByIdAndUpdate(
+        userId,
+        { isBlocked },
+        { new: true }
+    ).lean();
     if (!user) {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
-
-    if (user.isDeleted) {
-        throw new AppError(
-            StatusCodes.BAD_REQUEST,
-            "Deleted user cannot be modified"
-        );
-    }
-
-    user.isBlocked = isBlocked;
-
-    await user.save();
-
     return user;
 };
+
+// ─── Exports ──────────────────────────────────────────────────────────────────
+
 export const UserService = {
     registerUser,
     verifyOtp,
+    resendOtp,
     loginUser,
     getMe,
-    resendOtp,
     updateUser,
     deleteUser,
     updateBlockStatus,
 };
+

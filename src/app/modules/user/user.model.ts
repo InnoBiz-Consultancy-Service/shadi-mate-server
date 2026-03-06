@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { model, Schema } from "mongoose";
-import { IOtp, IUser, TGender, TUserRole } from "./user.interface";
+import { IOtp, IUser, IOtpUserData, TGender, TUserRole } from "./user.interface";
 
 // ─── User Schema ─────────────────────────────────────────────────────────────
 
@@ -71,13 +71,6 @@ UserSchema.methods.comparePassword = async function (
     return bcrypt.compare(candidatePassword, this.password);
 };
 
-
-
-UserSchema.pre("save", function (next) {
-    this.isDeleted = false;
-    next();
-});
-
 export const User = model<IUser>("User", UserSchema);
 
 // ─── OTP Schema ──────────────────────────────────────────────────────────────
@@ -86,6 +79,7 @@ const OtpSchema = new Schema<IOtp>({
     phone: {
         type: String,
         required: true,
+        unique: true, // একটা phone এ একটাই pending OTP doc
     },
     otp: {
         type: String,
@@ -94,7 +88,14 @@ const OtpSchema = new Schema<IOtp>({
     expiresAt: {
         type: Date,
         required: true,
-        index: { expires: 0 }, // TTL: document auto-deleted when expiresAt passes
+        index: { expires: 0 }, // TTL: MongoDB auto-deletes when expiresAt passes
+    },
+    userData: {
+        name: { type: String, required: true },
+        email: { type: String, required: true },
+        phone: { type: String, required: true },
+        password: { type: String, required: true }, // already hashed
+        gender: { type: String, enum: TGender, required: true },
     },
 });
 

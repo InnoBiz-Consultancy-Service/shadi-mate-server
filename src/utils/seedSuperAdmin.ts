@@ -1,6 +1,6 @@
 
 import bcryptjs from "bcryptjs"
-import { IUser } from "../app/modules/user/user.interface"
+import { IUser, TUserRole } from "../app/modules/user/user.interface"
 import { envVars } from "../config/envConfig"
 import { User } from "../app/modules/user/user.model"
 
@@ -18,7 +18,7 @@ export const seedSuperAdmin = async () => {
 
         const payload: Partial<IUser> = {
             name: "Shadi Mate",
-            role: "admin",
+            role: TUserRole.ADMIN,
             email: envVars.SUPER_ADMIN_EMAIL,
             password: envVars.SUPER_ADMIN_PASSWORD,
             isVerified: true,
