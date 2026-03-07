@@ -1,1 +1,137 @@
-// Add Here Contoroller Code
+import { Request, Response } from "express";
+import { StatusCodes } from "http-status-codes";
+import { catchAsync } from "../../../utils/catchAsync";
+import { UserService } from "./user.service";
+import AppError from "../../../helpers/AppError";
+import { sendResponse } from "../../../utils/sendResponse";
+
+// ─── Register ─────────────────────────────────────────────────────────────────
+const register = catchAsync(async (req: Request, res: Response) => {
+    const result = await UserService.registerUser(req.body);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.CREATED,
+        success: true,
+        message: result.message,
+        data: {
+            phone: result.phone,
+            otp: result.otp, // 🔴 DEVELOPMENT ONLY — remove in production
+        },
+    });
+});
+
+// ─── Verify OTP ───────────────────────────────────────────────────────────────
+const verifyOtp = catchAsync(async (req: Request, res: Response) => {
+    const result = await UserService.verifyOtp(req.body);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: result.message,
+        data: result.user,
+    });
+});
+
+// ─── Login ────────────────────────────────────────────────────────────────────
+const login = catchAsync(async (req: Request, res: Response) => {
+    const result = await UserService.loginUser(req.body);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: result.message,
+        token: result.token,
+        data: result.user,
+    });
+});
+
+// ─── Get Me (Protected) ───────────────────────────────────────────────────────
+const getMe = catchAsync(async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const user = await UserService.getMe(userId);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: "Profile fetched successfully",
+        data: user,
+    });
+});
+
+// ─── Resend OTP ───────────────────────────────────────────────────────────────
+const resendOtp = catchAsync(async (req: Request, res: Response) => {
+    const { phone } = req.body;
+    const result = await UserService.resendOtp(phone);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: result.message,
+        data: {
+            otp: result.otp, // 🔴 DEVELOPMENT ONLY
+        },
+    });
+});
+
+// ─── Update Profile ───────────────────────────────────────────────────────────
+const updateUser = catchAsync(async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const result = await UserService.updateUser(userId, req.body);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: "Profile updated successfully",
+        data: result,
+    });
+});
+
+// ─── Delete User (Soft Delete) ───────────────────────────────────────────────
+const deleteUser = catchAsync(async (req: Request, res: Response) => {
+    const userId = req.params.id;
+    const requestUser = (req as any).user;
+
+    await UserService.deleteUser(userId, requestUser);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: "User deleted successfully (soft delete)",
+    });
+});
+
+// ─── Block / Unblock User ─────────────────────────────────────────────────────
+const updateBlockStatus = catchAsync(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { isBlocked } = req.body;
+
+    if (typeof isBlocked !== "boolean") {
+        throw new AppError(
+            StatusCodes.BAD_REQUEST,
+            "isBlocked must be true or false"
+        );
+    }
+
+    const requestUser = (req as any).user;
+    const result = await UserService.updateBlockStatus(id, isBlocked, requestUser);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: isBlocked
+            ? "User blocked successfully"
+            : "User unblocked successfully",
+        data: result,
+    });
+});
+
+export const UserController = {
+    register,
+    verifyOtp,
+    login,
+    getMe,
+    resendOtp,
+    updateUser,
+    deleteUser,
+    updateBlockStatus,
+};

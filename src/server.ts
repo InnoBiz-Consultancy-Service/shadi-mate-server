@@ -3,6 +3,9 @@ import { Server } from "http";
 import mongoose from "mongoose";
 import app from "./app";
 import { envVars } from "./config/envConfig";
+import { seedSuperAdmin } from "./utils/seedSuperAdmin";
+import { seedGeoData } from "./utils/seedGeoData";
+
 
 
 let server: Server;
@@ -21,7 +24,8 @@ const startServer = async () => {
         console.log(error);
     }
 }
-
+seedSuperAdmin()
+seedGeoData()
 startServer()
 
 process.on("SIGTERM", () => {

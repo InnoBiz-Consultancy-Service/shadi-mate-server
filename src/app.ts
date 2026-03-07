@@ -1,7 +1,7 @@
 import cors from "cors";
 import express, { Request, Response } from "express";
 import { globalErrorHandler } from "./middleWares/globalErrorHandler";
-import {notFoundHandler} from "./middleWares/notFound";
+import { notFoundHandler } from "./middleWares/notFound";
 import { router } from "./app/routes/index ";
 
 const app = express()
@@ -13,7 +13,7 @@ app.use("/api/v1", router)
 
 app.get("/", (req: Request, res: Response) => {
     res.status(200).json({
-        message: "Welcome to Ontonim  Server"
+        message: "Welcome to Shadi Mate  Server"
     })
 })
 

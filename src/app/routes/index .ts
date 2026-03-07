@@ -1,19 +1,20 @@
 import { Router } from "express"
 import UserRoutes from "../modules/user/user.router"
-
+import GeoRoutes from "../modules/geo/geo.router"
 
 export const router = Router()
 
 const moduleRoutes = [
     {
-        path: "/user",
+        path: "/auth",
         route: UserRoutes
     },
-    // {
-    //     path: "/tour",
-    //     route: TourRoutes
-    // },
+    {
+        path: "/geo",
+        route: GeoRoutes
+    },
 ]
+
 
 moduleRoutes.forEach((route) => {
     router.use(route.path, route.route)
