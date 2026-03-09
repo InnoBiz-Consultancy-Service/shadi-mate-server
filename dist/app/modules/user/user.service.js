@@ -13,91 +13,107 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserService = void 0;
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const http_status_codes_1 = require("http-status-codes");
+const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const user_model_1 = require("./user.model");
 const envConfig_1 = require("../../../config/envConfig");
-// ─── Helper: generate 6-digit OTP ────────────────────────────────────────────
-const generateOtp = () => {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-};
-// ─── Register ────────────────────────────────────────────────────────────────
+// ─── Helper: Generate 6-digit OTP ─────────────────────────────────────────────
+const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
+const OTP_EXPIRY_MINUTES = 5;
+// ─── Register ─────────────────────────────────────────────────────────────────
 const registerUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
-    const { name, email, phone, password } = payload;
-    // Check if user already exists
-    const existingUser = yield user_model_1.User.findOne({ $or: [{ email }, { phone }] });
+    const { name, email, phone, password, gender } = payload;
+    // 1️⃣ User ও pending OTP একসাথে parallel এ check করো — 2টা query একই time এ চলবে
+    const [existingUser, existingOtp] = yield Promise.all([
+        user_model_1.User.findOne({ phone }, "_id").lean(),
+        user_model_1.Otp.findOne({ phone }, "_id").lean(),
+    ]);
     if (existingUser) {
-        if (existingUser.email === email) {
-            throw new AppError_1.default(http_status_codes_1.StatusCodes.CONFLICT, "Email already registered");
-        }
-        if (existingUser.phone === phone) {
-            throw new AppError_1.default(http_status_codes_1.StatusCodes.CONFLICT, "Phone number already registered");
-        }
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.CONFLICT, "Phone number already registered");
     }
-    // Create user (not yet verified)
-    const user = yield user_model_1.User.create({ name, email, phone, password });
-    // Generate OTP and save
-    const otpCode = generateOtp();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-    // Delete any existing OTP for this phone
-    yield user_model_1.Otp.deleteMany({ phone });
-    yield user_model_1.Otp.create({ phone, otp: otpCode, expiresAt });
-    // TODO: Replace with real SMS gateway (e.g. Twilio, SSLCommerz notif)
-    // await sendSms(phone, `Your Shadi Mate OTP is: ${otpCode}`);
+    if (existingOtp) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.CONFLICT, "OTP already sent to this number. Please verify or use resend-otp");
+    }
+    const hashedPassword = yield bcryptjs_1.default.hash(password, 12);
+    const otp = generateOtp();
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+    yield user_model_1.Otp.create({
+        phone,
+        otp,
+        expiresAt,
+        userData: { name, email, phone, password: hashedPassword, gender },
+    });
     return {
-        userId: user._id,
-        phone: user.phone,
-        message: "OTP sent to phone number (mock mode — OTP returned in response)",
-        // 🔴 DEVELOPMENT ONLY — remove in production:
-        otp: otpCode,
+        message: "OTP sent successfully. Please verify your phone number.",
+        phone,
+        otp,
     };
 });
-// ─── Verify OTP ──────────────────────────────────────────────────────────────
+// ─── Verify OTP ───────────────────────────────────────────────────────────────
 const verifyOtp = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     const { phone, otp } = payload;
-    const otpRecord = yield user_model_1.Otp.findOne({ phone });
-    if (!otpRecord) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "OTP not found or already expired");
+    const otpDoc = yield user_model_1.Otp.findOne({ phone });
+    if (!otpDoc) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "No pending registration found for this phone number");
     }
-    if (otpRecord.otp !== otp) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Invalid OTP");
+    // 2️⃣ Expired?
+    if (otpDoc.expiresAt < new Date()) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.GONE, "OTP has expired. Please register again or use resend-otp");
     }
-    if (otpRecord.expiresAt < new Date()) {
-        yield user_model_1.Otp.deleteOne({ phone });
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "OTP has expired. Please request a new one");
+    if (otpDoc.otp !== otp) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid OTP");
     }
-    // Mark user as verified
-    const user = yield user_model_1.User.findOneAndUpdate({ phone }, { isVerified: true }, { new: true, select: "-password" });
-    if (!user) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
-    }
-    // Delete used OTP
-    yield user_model_1.Otp.deleteOne({ phone });
+    // OTP valid — User create ও OTP delete একসাথে parallel এ চলবে
+    const [user] = yield Promise.all([
+        user_model_1.User.create(Object.assign(Object.assign({}, otpDoc.userData), { isVerified: true })),
+        user_model_1.Otp.deleteOne({ _id: otpDoc._id }), // _id দিয়ে delete → index hit, fastest
+    ]);
     return {
-        message: "Phone number verified successfully",
-        user,
+        message: "Phone verified successfully. Account created!",
+        user: {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            gender: user.gender,
+            role: user.role,
+            isVerified: user.isVerified,
+        },
+    };
+});
+// ─── Resend OTP ───────────────────────────────────────────────────────────────
+const resendOtp = (phone) => __awaiter(void 0, void 0, void 0, function* () {
+    const newOtp = generateOtp();
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+    const updated = yield user_model_1.Otp.findOneAndUpdate({ phone }, { otp: newOtp, expiresAt }, { new: true });
+    if (!updated) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "No pending registration found for this phone number. Please register first");
+    }
+    return {
+        message: "OTP resent successfully.",
+        otp: newOtp, // 🔴 DEVELOPMENT ONLY
     };
 });
 // ─── Login ────────────────────────────────────────────────────────────────────
 const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     const { phone, password } = payload;
-    // Find user and include password for comparison
-    const user = yield user_model_1.User.findOne({ phone }).select("+password");
+    const user = yield user_model_1.User.findOne({ phone, isDeleted: false }).select("+password");
     if (!user) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid phone number or password");
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid phone or password");
     }
     if (user.isBlocked) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Your account has been blocked by admin");
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Your account has been blocked");
     }
     if (!user.isVerified) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Account not verified. Please verify your phone number first");
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Please verify your phone number first");
     }
-    const isPasswordCorrect = yield user.comparePassword(password);
-    if (!isPasswordCorrect) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid phone number or password");
+    // 2️⃣ Password check
+    const isMatch = yield user.comparePassword(password);
+    if (!isMatch) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid phone or password");
     }
-    // Sign JWT
     const token = jsonwebtoken_1.default.sign({ id: user._id, phone: user.phone, role: user.role }, envConfig_1.envVars.JWT_SECRET, { expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN });
     return {
         message: "Login successful",
@@ -107,6 +123,7 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
             name: user.name,
             email: user.email,
             phone: user.phone,
+            gender: user.gender,
             role: user.role,
             isVerified: user.isVerified,
         },
@@ -114,91 +131,52 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
 });
 // ─── Get Me ───────────────────────────────────────────────────────────────────
 const getMe = (userId) => __awaiter(void 0, void 0, void 0, function* () {
-    const user = yield user_model_1.User.findById(userId).select("-password");
-    const getUser = yield user_model_1.User.findById(userId);
-    if (!getUser) {
+    const user = yield user_model_1.User.findById(userId).lean();
+    if (!user) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
-    }
-    if (getUser.isDeleted) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Account has been deleted");
-    }
-    if (getUser.isBlocked) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Your account has been blocked");
     }
     return user;
 });
-// ─── Resend OTP ───────────────────────────────────────────────────────────────
-const resendOtp = (phone) => __awaiter(void 0, void 0, void 0, function* () {
-    const user = yield user_model_1.User.findOne({ phone });
-    if (!user) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "No user found with this phone number");
-    }
-    if (user.isVerified) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "This account is already verified");
-    }
-    const otpCode = generateOtp();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
-    yield user_model_1.Otp.deleteMany({ phone });
-    yield user_model_1.Otp.create({ phone, otp: otpCode, expiresAt });
-    return {
-        message: "OTP resent to phone number (mock mode — OTP returned in response)",
-        otp: otpCode, // 🔴 DEVELOPMENT ONLY
-    };
-});
+// ─── Update User ──────────────────────────────────────────────────────────────
 const updateUser = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
-    const getUser = yield user_model_1.User.findById(userId);
-    if (!getUser) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
-    }
-    if (getUser.isDeleted) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Account has been deleted");
-    }
-    if (getUser.isBlocked) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Your account has been blocked by admin");
-    }
-    const user = yield user_model_1.User.findByIdAndUpdate(userId, payload, { new: true, runValidators: true, select: "-password" });
+    const user = yield user_model_1.User.findByIdAndUpdate(userId, payload, {
+        new: true,
+        runValidators: true,
+    }).lean();
     if (!user) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
     }
     return user;
 });
+// ─── Delete User (Soft Delete) ───────────────────────────────────────────────
 const deleteUser = (userId, requestUser) => __awaiter(void 0, void 0, void 0, function* () {
-    const user = yield user_model_1.User.findById(userId);
-    if (!user) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
-    }
-    if (user.isDeleted) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "User already deleted");
-    }
-    // 🔐 Permission Logic
     if (requestUser.role !== "admin" && requestUser.id !== userId) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "You can only delete your own account");
     }
-    user.isDeleted = true;
-    yield user.save();
-    return null;
-});
-const updateBlockStatus = (userId, isBlocked, requestUser) => __awaiter(void 0, void 0, void 0, function* () {
-    if (requestUser.role !== "admin") {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Only admin can block or unblock users");
-    }
-    const user = yield user_model_1.User.findById(userId);
+    const user = yield user_model_1.User.findByIdAndUpdate(userId, { isDeleted: true }, { new: true });
     if (!user) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
     }
-    if (user.isDeleted) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Deleted user cannot be modified");
-    }
-    user.isBlocked = isBlocked;
-    yield user.save();
     return user;
 });
+// ─── Update Block Status ──────────────────────────────────────────────────────
+const updateBlockStatus = (userId, isBlocked, requestUser) => __awaiter(void 0, void 0, void 0, function* () {
+    if (requestUser.role !== "admin") {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Only admins can block/unblock users");
+    }
+    const user = yield user_model_1.User.findByIdAndUpdate(userId, { isBlocked }, { new: true }).lean();
+    if (!user) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
+    }
+    return user;
+});
+// ─── Exports ──────────────────────────────────────────────────────────────────
 exports.UserService = {
     registerUser,
     verifyOtp,
+    resendOtp,
     loginUser,
     getMe,
-    resendOtp,
     updateUser,
     deleteUser,
     updateBlockStatus,

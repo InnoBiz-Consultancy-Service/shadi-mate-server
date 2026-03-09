@@ -6,16 +6,22 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.router = void 0;
 const express_1 = require("express");
 const user_router_1 = __importDefault(require("../modules/user/user.router"));
+const geo_router_1 = __importDefault(require("../modules/geo/geo.router"));
+const profile_route_1 = require("../modules/profile/profile.route");
 exports.router = (0, express_1.Router)();
 const moduleRoutes = [
     {
         path: "/auth",
         route: user_router_1.default
     },
-    // {
-    //     path: "/tour",
-    //     route: TourRoutes
-    // },
+    {
+        path: "/geo",
+        route: geo_router_1.default
+    },
+    {
+        path: "/profile",
+        route: profile_route_1.ProfileRoutes
+    }
 ];
 moduleRoutes.forEach((route) => {
     exports.router.use(route.path, route.route);

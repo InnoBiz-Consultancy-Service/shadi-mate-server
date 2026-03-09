@@ -18,6 +18,9 @@ exports.registerSchema = zod_1.z.object({
         password: zod_1.z
             .string({ error: "Password is required" })
             .min(6, "Password must be at least 6 characters"),
+        gender: zod_1.z.enum(["male", "female", "other"], {
+            error: "Gender must be male, female, or other",
+        }),
     }),
 });
 // ─── Verify OTP ───────────────────────────────────────────────────────────────
