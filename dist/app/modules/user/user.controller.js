@@ -26,7 +26,6 @@ const register = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, vo
         success: true,
         message: result.message,
         data: {
-            userId: result.userId,
             phone: result.phone,
             otp: result.otp, // 🔴 DEVELOPMENT ONLY — remove in production
         },

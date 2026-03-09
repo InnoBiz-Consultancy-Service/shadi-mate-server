@@ -16,6 +16,7 @@ const mongoose_1 = __importDefault(require("mongoose"));
 const app_1 = __importDefault(require("./app"));
 const envConfig_1 = require("./config/envConfig");
 const seedSuperAdmin_1 = require("./utils/seedSuperAdmin");
+const seedGeoData_1 = require("./utils/seedGeoData");
 let server;
 const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -30,6 +31,7 @@ const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
     }
 });
 (0, seedSuperAdmin_1.seedSuperAdmin)();
+(0, seedGeoData_1.seedGeoData)();
 startServer();
 process.on("SIGTERM", () => {
     console.log("SIGTERM signal recieved... Server shutting down..");
