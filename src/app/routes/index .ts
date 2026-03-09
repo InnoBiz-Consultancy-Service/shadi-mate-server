@@ -1,6 +1,7 @@
 import { Router } from "express"
 import UserRoutes from "../modules/user/user.router"
 import GeoRoutes from "../modules/geo/geo.router"
+import { ProfileRoutes } from "../modules/profile/profile.route"
 
 export const router = Router()
 
@@ -13,6 +14,10 @@ const moduleRoutes = [
         path: "/geo",
         route: GeoRoutes
     },
+    {
+        path: "/profile",
+        route: ProfileRoutes
+    }
 ]
 
 
