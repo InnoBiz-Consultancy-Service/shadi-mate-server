@@ -151,7 +151,14 @@ const loginUser = async (payload: TLoginInput) => {
     }
 
     const token = jwt.sign(
-        { id: user._id, phone: user.phone, role: user.role },
+        {
+            id: user._id,
+            phone: user.phone,
+            role: user.role,
+            isProfileCompleted: user.isProfileCompleted,
+            isVerified: user.isVerified,
+
+        },
         envVars.JWT_SECRET,
         { expiresIn: envVars.JWT_EXPIRES_IN as `${number}${'s' | 'm' | 'h' | 'd'}` }
     );
@@ -166,7 +173,6 @@ const loginUser = async (payload: TLoginInput) => {
             phone: user.phone,
             gender: user.gender,
             role: user.role,
-            isVerified: user.isVerified,
         },
     };
 };
