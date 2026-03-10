@@ -34,6 +34,11 @@ const profileSchema = new mongoose_1.Schema({
         type: String,
         required: true,
     },
+    user: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+    },
     relation: {
         type: String,
         enum: Object.values(profile_interface_1.GuardianRelation),

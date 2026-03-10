@@ -4,6 +4,7 @@ import { catchAsync } from "../../../utils/catchAsync";
 import { UserService } from "./user.service";
 import AppError from "../../../helpers/AppError";
 import { sendResponse } from "../../../utils/sendResponse";
+import { envVars } from "../../../config/envConfig";
 
 // ─── Register ─────────────────────────────────────────────────────────────────
 const register = catchAsync(async (req: Request, res: Response) => {
@@ -36,6 +37,14 @@ const verifyOtp = catchAsync(async (req: Request, res: Response) => {
 const login = catchAsync(async (req: Request, res: Response) => {
     const result = await UserService.loginUser(req.body);
 
+    // 🍪 Cookie set
+    res.cookie("accessToken", result.token, {
+        httpOnly: true,
+        secure: envVars.NODE_ENV === "production",
+        sameSite: envVars.NODE_ENV === "production" ? "none" : "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     sendResponse(res, {
         statusCode: StatusCodes.OK,
         success: true,
@@ -44,7 +53,6 @@ const login = catchAsync(async (req: Request, res: Response) => {
         data: result.user,
     });
 });
-
 // ─── Get Me (Protected) ───────────────────────────────────────────────────────
 const getMe = catchAsync(async (req: Request, res: Response) => {
     const userId = (req as any).user.id;

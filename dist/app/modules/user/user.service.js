@@ -114,7 +114,12 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     if (!isMatch) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid phone or password");
     }
-    const token = jsonwebtoken_1.default.sign({ id: user._id, phone: user.phone, role: user.role }, envConfig_1.envVars.JWT_SECRET, { expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN });
+    const token = jsonwebtoken_1.default.sign({
+        id: user._id,
+        phone: user.phone,
+        role: user.role,
+        isProfileCompleted: user.isProfileCompleted
+    }, envConfig_1.envVars.JWT_SECRET, { expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN });
     return {
         message: "Login successful",
         token,

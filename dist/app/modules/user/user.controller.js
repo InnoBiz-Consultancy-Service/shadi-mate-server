@@ -18,6 +18,7 @@ const catchAsync_1 = require("../../../utils/catchAsync");
 const user_service_1 = require("./user.service");
 const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const sendResponse_1 = require("../../../utils/sendResponse");
+const envConfig_1 = require("../../../config/envConfig");
 // ─── Register ─────────────────────────────────────────────────────────────────
 const register = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const result = yield user_service_1.UserService.registerUser(req.body);
@@ -44,11 +45,17 @@ const verifyOtp = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, v
 // ─── Login ────────────────────────────────────────────────────────────────────
 const login = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const result = yield user_service_1.UserService.loginUser(req.body);
+    // 🍪 Cookie set
+    res.cookie("accessToken", result.token, {
+        httpOnly: true,
+        secure: envConfig_1.envVars.NODE_ENV === "production",
+        sameSite: envConfig_1.envVars.NODE_ENV === "production" ? "none" : "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.OK,
         success: true,
         message: result.message,
-        token: result.token,
         data: result.user,
     });
 }));

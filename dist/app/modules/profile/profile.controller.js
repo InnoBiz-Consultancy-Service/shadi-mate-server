@@ -15,14 +15,26 @@ const catchAsync_1 = require("../../../utils/catchAsync");
 const sendResponse_1 = require("../../../utils/sendResponse");
 const profile_service_1 = require("./profile.service");
 const createProfile = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield profile_service_1.ProfileService.createProfile(req.body);
+    const userId = req.user.id;
+    const result = yield profile_service_1.ProfileService.createProfile(userId, req.body);
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.CREATED,
         success: true,
         message: "Profile created successfully",
-        data: result,
+        data: result
+    });
+}));
+const updateProfile = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const userId = req.user.id;
+    const result = yield profile_service_1.ProfileService.updateProfile(userId, req.body);
+    (0, sendResponse_1.sendResponse)(res, {
+        statusCode: http_status_codes_1.StatusCodes.OK,
+        success: true,
+        message: "Profile updated successfully",
+        data: result
     });
 }));
 exports.ProfileController = {
     createProfile,
+    updateProfile
 };
