@@ -42,8 +42,32 @@ export const verifyOtpSchema = z.object({
     }),
 });
 
-// ─── Login ────────────────────────────────────────────────────────────────────
-
+// ─── Forget Password (New) ───────────────────────────────────────────────────
+export const forgetPasswordSchema = z.object({
+    body: z.object({
+        identifier: z
+            .string({ error: "Phone number or email is required" })
+            .min(3, "Identifier must be at least 3 characters"),
+        
+        oldPassword: z
+            .string({ error: "Current password is required" })
+            .min(6, "Password must be at least 6 characters"),
+        
+        newPassword: z
+            .string({ error: "New password is required" })
+            .min(6, "New password must be at least 6 characters"),
+        
+        confirmPassword: z
+            .string({ error: "Please confirm your new password" })
+            .min(6, "Confirm password must be at least 6 characters"),
+    }).refine((data) => data.newPassword === data.confirmPassword, {
+        message: "New password and confirm password do not match",
+        path: ["confirmPassword"],
+    }).refine((data) => data.oldPassword !== data.newPassword, {
+        message: "New password must be different from old password",
+        path: ["newPassword"],
+    }),
+});
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 export const loginSchema = z.object({
@@ -60,3 +84,4 @@ export const loginSchema = z.object({
 export type TRegisterInput = z.infer<typeof registerSchema>["body"];
 export type TVerifyOtpInput = z.infer<typeof verifyOtpSchema>["body"];
 export type TLoginInput = z.infer<typeof loginSchema>["body"];
+export type TForgetPasswordInput = z.infer<typeof forgetPasswordSchema>["body"];

@@ -4,7 +4,7 @@ import { StatusCodes } from "http-status-codes";
 import AppError from "../../../helpers/AppError";
 import { User, Otp } from "./user.model";
 import { IUser } from "./user.interface";
-import { TRegisterInput, TVerifyOtpInput, TLoginInput } from "./user.validation";
+import { TRegisterInput, TVerifyOtpInput, TLoginInput, TForgetPasswordInput } from "./user.validation";
 import { envVars } from "../../../config/envConfig";
 
 // ─── Helper: Generate 6-digit OTP ─────────────────────────────────────────────
@@ -47,6 +47,7 @@ const registerUser = async (payload: TRegisterInput) => {
         phone,
         otp,
         expiresAt,
+        purpose: "registration", 
         userData: { 
             name, 
             email, 
@@ -69,7 +70,7 @@ const verifyOtp = async (payload: TVerifyOtpInput) => {
 
     console.log("🟢 Verifying OTP for phone:", phone);
 
-    const otpDoc = await Otp.findOne({ phone });
+    const otpDoc = await Otp.findOne({ phone, purpose: "registration" });
     if (!otpDoc) {
         throw new AppError(StatusCodes.NOT_FOUND, "No pending registration found for this phone number");
     }
@@ -84,15 +85,15 @@ const verifyOtp = async (payload: TVerifyOtpInput) => {
 
     // Log the userData before creating user
     console.log("🟢 OTP userData:", otpDoc.userData);
-    console.log("🟢 Password from OTP:", otpDoc.userData.password);
+    console.log("🟢 Password from OTP:", otpDoc.userData?.password);
 
     // ✅ Use the hashed password stored in OTP directly
     const userData = {
-        name: otpDoc.userData.name,
-        email: otpDoc.userData.email,
-        phone: otpDoc.userData.phone,
-        password: otpDoc.userData.password, // This is already hashed
-        gender: otpDoc.userData.gender,
+        name: otpDoc.userData?.name,
+        email: otpDoc.userData?.email,
+        phone: otpDoc.userData?.phone,
+        password: otpDoc.userData?.password, // This is already hashed
+        gender: otpDoc.userData?.gender,
         isVerified: true
     };
 
@@ -139,7 +140,7 @@ const resendOtp = async (phone: string) => {
     const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
     const updated = await Otp.findOneAndUpdate(
-        { phone },
+        { phone, purpose: "registration" },
         { otp: newOtp, expiresAt },
         { new: true }
     );
@@ -175,11 +176,6 @@ const loginUser = async (payload: TLoginInput) => {
         throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid phone/email or password");
     }
 
-    // console.log("🟡 User found:", user.phone, user.email);
-    // console.log("🟡 Stored password hash:", user.password);
-    // console.log("🟡 Is user verified:", user.isVerified);
-    // console.log("🟡 Is user blocked:", user.isBlocked);
-
     if (user.isBlocked) {
         throw new AppError(StatusCodes.FORBIDDEN, "Your account has been blocked");
     }
@@ -193,10 +189,6 @@ const loginUser = async (payload: TLoginInput) => {
     console.log("🟡 Password match result:", isMatch);
 
     if (!isMatch) {
-        // For debugging - check if password is stored in plain text
-        if (password === user.password) {
-            console.log("⚠️ WARNING: Password is stored in plain text!");
-        }
         throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid phone/email or password");
     }
 
@@ -226,6 +218,75 @@ const loginUser = async (payload: TLoginInput) => {
             role: user.role,
             isProfileCompleted: user.isProfileCompleted,
             isVerified: user.isVerified,
+        },
+    };
+};
+
+// ─── Forget Password (New Function) ───────────────────────────────────────────
+const forgetPassword = async (payload: TForgetPasswordInput) => {
+    const { identifier, oldPassword, newPassword } = payload;
+
+    console.log("🟣 Forget password attempt for identifier:", identifier);
+
+    // Find user by phone or email
+    const user = await User.findOne({
+        $or: [{ phone: identifier }, { email: identifier }],
+        isDeleted: false,
+    }).select("+password");
+
+    if (!user) {
+        console.log("🟣 User not found");
+        throw new AppError(StatusCodes.NOT_FOUND, "Account not found with this phone/email");
+    }
+
+    if (user.isBlocked) {
+        throw new AppError(StatusCodes.FORBIDDEN, "Your account has been blocked");
+    }
+
+    if (!user.isVerified) {
+        throw new AppError(StatusCodes.FORBIDDEN, "Please verify your account first");
+    }
+
+    // Verify old password
+    const isOldPasswordMatch = await bcrypt.compare(oldPassword, user.password);
+    console.log("🟣 Old password match result:", isOldPasswordMatch);
+
+    if (!isOldPasswordMatch) {
+        throw new AppError(StatusCodes.UNAUTHORIZED, "Current password is incorrect");
+    }
+
+    // Hash the new password
+    const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+    console.log("🟣 New password hashed successfully");
+
+    // Update password in database
+    user.password = hashedNewPassword;
+    await user.save();
+
+    console.log("🟣 Password updated successfully for user:", user.phone);
+
+    // Generate new token for auto-login (optional)
+    const token = jwt.sign(
+        {
+            id: user._id,
+            phone: user.phone,
+            email: user.email,
+            role: user.role,
+            isProfileCompleted: user.isProfileCompleted,
+            isVerified: user.isVerified,
+        },
+        envVars.JWT_SECRET,
+        { expiresIn: envVars.JWT_EXPIRES_IN as `${number}${'s' | 'm' | 'h' | 'd'}` }
+    );
+
+    return {
+        message: "Password changed successfully. Please login with your new password.",
+        token, // Optional: auto-login after password change
+        user: {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
         },
     };
 };
@@ -289,15 +350,13 @@ const updateBlockStatus = async (userId: string, isBlocked: boolean, requestUser
     return user;
 };
 
-
-
-
 // ─── Exports ──────────────────────────────────────────────────────────────────
 export const UserService = {
     registerUser,
     verifyOtp,
     resendOtp,
     loginUser,
+    forgetPassword, 
     getMe,
     updateUser,
     deleteUser,

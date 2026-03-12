@@ -25,11 +25,6 @@ const addressSchema = new mongoose_1.Schema({
     },
 }, { _id: false });
 const profileSchema = new mongoose_1.Schema({
-    gender: {
-        type: String,
-        enum: Object.values(profile_interface_1.Gender),
-        required: true,
-    },
     guardianContact: {
         type: String,
         required: true,
