@@ -1,8 +1,7 @@
-import bcrypt from "bcryptjs";
 import { model, Schema } from "mongoose";
-import { IOtp, IUser, IOtpUserData, TGender, TUserRole } from "./user.interface";
+import { IOtp, IUser, TGender, TUserRole } from "./user.interface";
 
-// ─── User Schema ─────────────────────────────────────────────────────────────
+// ─── User Schema ─────────────────────────────────────────
 
 const UserSchema = new Schema<IUser>(
     {
@@ -26,8 +25,7 @@ const UserSchema = new Schema<IUser>(
         },
         password: {
             type: String,
-            required: [true, "Password is required"],
-            minlength: [6, "Password must be at least 6 characters"],
+            required: true,
             select: false,
         },
         role: {
@@ -54,37 +52,45 @@ const UserSchema = new Schema<IUser>(
         gender: {
             type: String,
             enum: TGender,
-            required: [true, "Gender is required"],
+            required: true,
         },
     },
     { timestamps: true }
 );
 
-
 export const User = model<IUser>("User", UserSchema);
 
-// ─── OTP Schema ──────────────────────────────────────────────────────────────
+// ─── OTP Schema ─────────────────────────────────────────
 
 const OtpSchema = new Schema<IOtp>({
     phone: {
         type: String,
         required: true,
-        unique: true, 
+        unique: true,
     },
+
     otp: {
         type: String,
         required: true,
     },
+
     expiresAt: {
         type: Date,
         required: true,
-        index: { expires: 0 }, 
+        index: { expires: 0 },
     },
+
+    purpose: {
+        type: String,
+        enum: ["registration"],
+        default: "registration",
+    },
+
     userData: {
         name: { type: String, required: true },
         email: { type: String, required: true },
         phone: { type: String, required: true },
-        password: { type: String, required: true }, // already hashed
+        password: { type: String, required: true },
         gender: { type: String, enum: TGender, required: true },
     },
 });

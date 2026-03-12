@@ -54,12 +54,10 @@ const login = catchAsync(async (req: Request, res: Response) => {
         },
     });
 });
-
 // ─── Forget Password (New Controller) ─────────────────────────────────────────
 const forgetPassword = catchAsync(async (req: Request, res: Response) => {
     const result = await UserService.forgetPassword(req.body);
 
-    // Optional: নতুন পাসওয়ার্ড সেট করার পর অটো-লগইন করতে চাইলে
     if (result.token) {
         res.cookie("accessToken", result.token, {
             httpOnly: true,

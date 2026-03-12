@@ -46,7 +46,7 @@ const registerUser = (payload) => __awaiter(void 0, void 0, void 0, function* ()
         phone,
         otp,
         expiresAt,
-        purpose: "registration", // পারপাস সেট করুন
+        purpose: "registration",
         userData: {
             name,
             email,
@@ -63,47 +63,42 @@ const registerUser = (payload) => __awaiter(void 0, void 0, void 0, function* ()
 });
 // ─── Verify OTP & Auto-login ─────────────────────────────────────────────────
 const verifyOtp = (payload) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c, _d, _e, _f;
     const { phone, otp } = payload;
     console.log("🟢 Verifying OTP for phone:", phone);
-    const otpDoc = yield user_model_1.Otp.findOne({ phone, purpose: "registration" });
+    // OTP খুঁজে বের করা
+    const otpDoc = yield user_model_1.Otp.findOne({
+        phone,
+        purpose: "registration",
+    });
     if (!otpDoc) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "No pending registration found for this phone number");
     }
+    // OTP expire check
     if (otpDoc.expiresAt < new Date()) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.GONE, "OTP has expired. Please register again or use resend-otp");
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.GONE, "OTP expired. Please register again");
     }
+    // OTP match check
     if (otpDoc.otp !== otp) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid OTP");
     }
-    // Log the userData before creating user
-    console.log("🟢 OTP userData:", otpDoc.userData);
-    console.log("🟢 Password from OTP:", (_a = otpDoc.userData) === null || _a === void 0 ? void 0 : _a.password);
-    // ✅ Use the hashed password stored in OTP directly
-    const userData = {
-        name: (_b = otpDoc.userData) === null || _b === void 0 ? void 0 : _b.name,
-        email: (_c = otpDoc.userData) === null || _c === void 0 ? void 0 : _c.email,
-        phone: (_d = otpDoc.userData) === null || _d === void 0 ? void 0 : _d.phone,
-        password: (_e = otpDoc.userData) === null || _e === void 0 ? void 0 : _e.password, // This is already hashed
-        gender: (_f = otpDoc.userData) === null || _f === void 0 ? void 0 : _f.gender,
-        isVerified: true
-    };
-    const user = yield user_model_1.User.create(userData);
-    // Verify the user was created with the hashed password
-    const createdUser = yield user_model_1.User.findById(user._id).select("+password");
-    console.log("🟢 Created user password hash:", createdUser === null || createdUser === void 0 ? void 0 : createdUser.password);
+    // userData থেকে user create
+    const user = yield user_model_1.User.create(Object.assign(Object.assign({}, otpDoc.userData), { isVerified: true }));
+    // OTP delete
     yield user_model_1.Otp.deleteOne({ _id: otpDoc._id });
-    // Generate JWT token for auto-login
+    // JWT token generate
     const token = jsonwebtoken_1.default.sign({
         id: user._id,
         phone: user.phone,
         email: user.email,
         role: user.role,
-        isProfileCompleted: user.isProfileCompleted,
         isVerified: user.isVerified,
-    }, envConfig_1.envVars.JWT_SECRET, { expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN });
+        isProfileCompleted: user.isProfileCompleted,
+    }, envConfig_1.envVars.JWT_SECRET, {
+        expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN,
+    });
     return {
         message: "Phone verified successfully. Account created!",
+        token,
         user: {
             _id: user._id,
             name: user.name,
@@ -112,8 +107,8 @@ const verifyOtp = (payload) => __awaiter(void 0, void 0, void 0, function* () {
             gender: user.gender,
             role: user.role,
             isVerified: user.isVerified,
+            isProfileCompleted: user.isProfileCompleted,
         },
-        token, // ✅ Auto-login token
     };
 });
 // ─── Resend OTP ───────────────────────────────────────────────────────────────
@@ -132,50 +127,72 @@ const resendOtp = (phone) => __awaiter(void 0, void 0, void 0, function* () {
 // ─── Login ────────────────────────────────────────────────────────────────────
 const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     const { identifier, password } = payload;
-    console.log("🟡 Login attempt for identifier:", identifier);
-    console.log("🟡 Provided password:", password);
-    // Find user by phone or email
+    console.log("🟡 Login attempt:", identifier);
+    // ───── 1️⃣ Check verified users ─────
     const user = yield user_model_1.User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
         isDeleted: false,
     }).select("+password");
-    if (!user) {
-        console.log("🟡 User not found");
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid phone/email or password");
-    }
-    if (user.isBlocked) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Your account has been blocked");
-    }
-    if (!user.isVerified) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Please verify your phone/email first");
-    }
-    // Compare passwords
-    const isMatch = yield bcryptjs_1.default.compare(password, user.password);
-    console.log("🟡 Password match result:", isMatch);
-    if (!isMatch) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid phone/email or password");
-    }
-    // Generate JWT token
-    const token = jsonwebtoken_1.default.sign({
-        id: user._id,
-        phone: user.phone,
-        email: user.email,
-        role: user.role,
-        isProfileCompleted: user.isProfileCompleted,
-        isVerified: user.isVerified,
-    }, envConfig_1.envVars.JWT_SECRET, { expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN });
-    return {
-        message: "Login successful",
-        token,
-        user: {
-            _id: user._id,
-            name: user.name,
-            email: user.email,
+    if (user) {
+        if (user.isBlocked) {
+            throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Your account has been blocked");
+        }
+        if (!user.isVerified) {
+            throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Please verify your account first");
+        }
+        const isMatch = yield bcryptjs_1.default.compare(password, user.password);
+        if (!isMatch) {
+            throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid credentials");
+        }
+        const token = jsonwebtoken_1.default.sign({
+            id: user._id,
             phone: user.phone,
-            gender: user.gender,
+            email: user.email,
             role: user.role,
             isProfileCompleted: user.isProfileCompleted,
             isVerified: user.isVerified,
+        }, envConfig_1.envVars.JWT_SECRET, {
+            expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN,
+        });
+        return {
+            message: "Login successful",
+            token,
+            user,
+        };
+    }
+    // ───── 2️⃣ Check OTP pending users ─────
+    const otpDoc = yield user_model_1.Otp.findOne({
+        $or: [{ phone: identifier }, { "userData.email": identifier }],
+        purpose: "registration",
+    });
+    if (!otpDoc) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Account not found");
+    }
+    if (otpDoc.expiresAt < new Date()) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.GONE, "OTP expired. Please register again");
+    }
+    const isMatch = yield bcryptjs_1.default.compare(password, otpDoc.userData.password);
+    if (!isMatch) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid credentials");
+    }
+    const token = jsonwebtoken_1.default.sign({
+        phone: otpDoc.userData.phone,
+        email: otpDoc.userData.email,
+        role: "user",
+        isVerified: false,
+        pendingRegistration: true,
+    }, envConfig_1.envVars.JWT_SECRET, {
+        expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN,
+    });
+    return {
+        message: "Login successful (pending verification)",
+        token,
+        user: {
+            name: otpDoc.userData.name,
+            email: otpDoc.userData.email,
+            phone: otpDoc.userData.phone,
+            gender: otpDoc.userData.gender,
+            isVerified: false,
         },
     };
 });
