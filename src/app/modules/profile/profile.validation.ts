@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export const createProfileValidation = z.object({
     body: z.object({
-        gender: z.enum(["male", "female"]),
 
         guardianContact: z.string(),
 

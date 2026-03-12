@@ -61,6 +61,28 @@ const login = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 
         },
     });
 }));
+// ─── Forget Password (New Controller) ─────────────────────────────────────────
+const forgetPassword = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield user_service_1.UserService.forgetPassword(req.body);
+    // Optional: নতুন পাসওয়ার্ড সেট করার পর অটো-লগইন করতে চাইলে
+    if (result.token) {
+        res.cookie("accessToken", result.token, {
+            httpOnly: true,
+            secure: envConfig_1.envVars.NODE_ENV === "production",
+            sameSite: envConfig_1.envVars.NODE_ENV === "production" ? "none" : "lax",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
+    }
+    (0, sendResponse_1.sendResponse)(res, {
+        statusCode: http_status_codes_1.StatusCodes.OK,
+        success: true,
+        message: result.message,
+        data: {
+            user: result.user,
+            token: result.token, // Optional
+        },
+    });
+}));
 // ─── Get Me (Protected) ───────────────────────────────────────────────────────
 const getMe = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = req.user.id;
@@ -129,6 +151,7 @@ exports.UserController = {
     register,
     verifyOtp,
     login,
+    forgetPassword,
     getMe,
     resendOtp,
     updateUser,

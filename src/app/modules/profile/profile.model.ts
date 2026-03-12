@@ -1,5 +1,5 @@
 import { Schema, model } from "mongoose";
-import { Gender, GuardianRelation } from "./profile.interface";
+import {  GuardianRelation } from "./profile.interface";
 
 const addressSchema = new Schema(
     {
@@ -28,11 +28,7 @@ const addressSchema = new Schema(
 
 const profileSchema = new Schema(
     {
-        gender: {
-            type: String,
-            enum: Object.values(Gender),
-            required: true,
-        },
+       
 
         guardianContact: {
             type: String,
