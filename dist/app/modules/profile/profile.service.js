@@ -33,6 +33,8 @@ const checkProfileCompletion = (payload) => {
 };
 // ─── Create Profile ─────────────────────────
 const createProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!userId)
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "User ID is required");
     const existing = yield profile_model_1.Profile.findOne({ userId });
     if (existing) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Profile already exists");

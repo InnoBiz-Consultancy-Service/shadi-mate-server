@@ -49,8 +49,9 @@ const login = catchAsync(async (req: Request, res: Response) => {
         statusCode: StatusCodes.OK,
         success: true,
         message: result.message,
-        token: result.token,
-        data: result.user,
+        data: {
+            token: result.token, 
+        },
     });
 });
 // ─── Get Me (Protected) ───────────────────────────────────────────────────────
