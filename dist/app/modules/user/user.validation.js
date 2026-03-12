@@ -36,11 +36,12 @@ exports.verifyOtpSchema = zod_1.z.object({
     }),
 });
 // ─── Login ────────────────────────────────────────────────────────────────────
+// ─── Login ────────────────────────────────────────────────────────────────────
 exports.loginSchema = zod_1.z.object({
     body: zod_1.z.object({
-        phone: zod_1.z
-            .string({ error: "Phone number is required" })
-            .regex(/^01[3-9]\d{8}$/, "Please provide a valid Bangladeshi phone number"),
+        identifier: zod_1.z
+            .string({ error: "Phone number or email is required" })
+            .min(3, "Identifier must be at least 3 characters"),
         password: zod_1.z
             .string({ error: "Password is required" })
             .min(6, "Password must be at least 6 characters"),

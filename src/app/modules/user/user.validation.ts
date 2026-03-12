@@ -44,16 +44,17 @@ export const verifyOtpSchema = z.object({
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 
-export const loginSchema = z.object({
-    body: z.object({
-        phone: z
-            .string({ error: "Phone number is required" })
-            .regex(/^01[3-9]\d{8}$/, "Please provide a valid Bangladeshi phone number"),
 
-        password: z
-            .string({ error: "Password is required" })
-            .min(6, "Password must be at least 6 characters"),
-    }),
+// ─── Login ────────────────────────────────────────────────────────────────────
+export const loginSchema = z.object({
+  body: z.object({
+    identifier: z
+      .string({ error: "Phone number or email is required" })
+      .min(3, "Identifier must be at least 3 characters"),
+    password: z
+      .string({ error: "Password is required" })
+      .min(6, "Password must be at least 6 characters"),
+  }),
 });
 
 export type TRegisterInput = z.infer<typeof registerSchema>["body"];

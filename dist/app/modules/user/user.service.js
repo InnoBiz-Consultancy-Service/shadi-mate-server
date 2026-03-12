@@ -25,7 +25,6 @@ const OTP_EXPIRY_MINUTES = 5;
 // ─── Register ─────────────────────────────────────────────────────────────────
 const registerUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     const { name, email, phone, password, gender } = payload;
-    // 1️⃣ User ও pending OTP একসাথে parallel এ check করো — 2টা query একই time এ চলবে
     const [existingUser, existingOtp] = yield Promise.all([
         user_model_1.User.findOne({ phone }, "_id").lean(),
         user_model_1.Otp.findOne({ phone }, "_id").lean(),
@@ -58,17 +57,17 @@ const verifyOtp = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     if (!otpDoc) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "No pending registration found for this phone number");
     }
-    // 2️⃣ Expired?
     if (otpDoc.expiresAt < new Date()) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.GONE, "OTP has expired. Please register again or use resend-otp");
     }
     if (otpDoc.otp !== otp) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid OTP");
     }
-    // OTP valid — User create ও OTP delete একসাথে parallel এ চলবে
+    // Ensure password is hashed (in case of any legacy plain password)
+    const hashedPassword = yield bcryptjs_1.default.hash(otpDoc.userData.password, 12);
     const [user] = yield Promise.all([
-        user_model_1.User.create(Object.assign(Object.assign({}, otpDoc.userData), { isVerified: true })),
-        user_model_1.Otp.deleteOne({ _id: otpDoc._id }), // _id দিয়ে delete → index hit, fastest
+        user_model_1.User.create(Object.assign(Object.assign({}, otpDoc.userData), { password: hashedPassword, isVerified: true })),
+        user_model_1.Otp.deleteOne({ _id: otpDoc._id }),
     ]);
     return {
         message: "Phone verified successfully. Account created!",
@@ -98,25 +97,29 @@ const resendOtp = (phone) => __awaiter(void 0, void 0, void 0, function* () {
 });
 // ─── Login ────────────────────────────────────────────────────────────────────
 const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
-    const { phone, password } = payload;
-    const user = yield user_model_1.User.findOne({ phone, isDeleted: false }).select("+password");
+    const { identifier, password } = payload;
+    const user = yield user_model_1.User.findOne({
+        $or: [{ phone: identifier }, { email: identifier }],
+        isDeleted: false
+    }).select("+password");
     if (!user) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid phone or password");
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid phone/email or password");
     }
     if (user.isBlocked) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Your account has been blocked");
     }
     if (!user.isVerified) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Please verify your phone number first");
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Please verify your phone/email first");
     }
-    // 2️⃣ Password check
-    const isMatch = yield user.comparePassword(password);
+    // bcrypt check
+    const isMatch = yield bcryptjs_1.default.compare(password, user.password);
     if (!isMatch) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid phone or password");
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid phone/email or password");
     }
     const token = jsonwebtoken_1.default.sign({
         id: user._id,
         phone: user.phone,
+        email: user.email,
         role: user.role,
         isProfileCompleted: user.isProfileCompleted,
         isVerified: user.isVerified,
@@ -124,6 +127,14 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     return {
         message: "Login successful",
         token,
+        user: {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone,
+            gender: user.gender,
+            role: user.role,
+        },
     };
 });
 // ─── Get Me ───────────────────────────────────────────────────────────────────

@@ -60,20 +60,6 @@ const UserSchema = new Schema<IUser>(
     { timestamps: true }
 );
 
-// Hash password before saving
-UserSchema.pre("save", async function (next) {
-    if (!this.isModified("password")) return next();
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-});
-
-// Compare password method
-UserSchema.methods.comparePassword = async function (
-    candidatePassword: string
-): Promise<boolean> {
-    return bcrypt.compare(candidatePassword, this.password);
-};
 
 export const User = model<IUser>("User", UserSchema);
 
@@ -83,7 +69,7 @@ const OtpSchema = new Schema<IOtp>({
     phone: {
         type: String,
         required: true,
-        unique: true, // একটা phone এ একটাই pending OTP doc
+        unique: true, 
     },
     otp: {
         type: String,
@@ -92,7 +78,7 @@ const OtpSchema = new Schema<IOtp>({
     expiresAt: {
         type: Date,
         required: true,
-        index: { expires: 0 }, // TTL: MongoDB auto-deletes when expiresAt passes
+        index: { expires: 0 }, 
     },
     userData: {
         name: { type: String, required: true },
