@@ -64,7 +64,6 @@ const login = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 
 // ─── Forget Password (New Controller) ─────────────────────────────────────────
 const forgetPassword = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const result = yield user_service_1.UserService.forgetPassword(req.body);
-    // Optional: নতুন পাসওয়ার্ড সেট করার পর অটো-লগইন করতে চাইলে
     if (result.token) {
         res.cookie("accessToken", result.token, {
             httpOnly: true,

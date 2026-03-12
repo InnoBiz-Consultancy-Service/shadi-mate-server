@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Otp = exports.User = void 0;
 const mongoose_1 = require("mongoose");
 const user_interface_1 = require("./user.interface");
-// ─── User Schema ─────────────────────────────────────────────────────────────
+// ─── User Schema ─────────────────────────────────────────
 const UserSchema = new mongoose_1.Schema({
     name: {
         type: String,
@@ -25,8 +25,7 @@ const UserSchema = new mongoose_1.Schema({
     },
     password: {
         type: String,
-        required: [true, "Password is required"],
-        minlength: [6, "Password must be at least 6 characters"],
+        required: true,
         select: false,
     },
     role: {
@@ -53,11 +52,11 @@ const UserSchema = new mongoose_1.Schema({
     gender: {
         type: String,
         enum: user_interface_1.TGender,
-        required: [true, "Gender is required"],
+        required: true,
     },
 }, { timestamps: true });
 exports.User = (0, mongoose_1.model)("User", UserSchema);
-// ─── OTP Schema ──────────────────────────────────────────────────────────────
+// ─── OTP Schema ─────────────────────────────────────────
 const OtpSchema = new mongoose_1.Schema({
     phone: {
         type: String,
@@ -73,11 +72,16 @@ const OtpSchema = new mongoose_1.Schema({
         required: true,
         index: { expires: 0 },
     },
+    purpose: {
+        type: String,
+        enum: ["registration"],
+        default: "registration",
+    },
     userData: {
         name: { type: String, required: true },
         email: { type: String, required: true },
         phone: { type: String, required: true },
-        password: { type: String, required: true }, // already hashed
+        password: { type: String, required: true },
         gender: { type: String, enum: user_interface_1.TGender, required: true },
     },
 });

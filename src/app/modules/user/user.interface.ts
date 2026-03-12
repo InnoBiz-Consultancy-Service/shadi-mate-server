@@ -35,7 +35,7 @@ export interface IOtpUserData {
     name: string;
     email: string;
     phone: string;
-    password: string; // already hashed
+    password: string;
     gender: TGender;
 }
 
@@ -44,4 +44,5 @@ export interface IOtp extends Document {
     otp: string;
     expiresAt: Date;
     userData: IOtpUserData;
+    purpose: "registration" | "forget-password" | "login";
 }

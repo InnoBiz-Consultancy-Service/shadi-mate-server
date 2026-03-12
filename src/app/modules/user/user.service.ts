@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import { StatusCodes } from "http-status-codes";
 import AppError from "../../../helpers/AppError";
 import { User, Otp } from "./user.model";
-import { IUser } from "./user.interface";
+import { IUser, TUserRole } from "./user.interface";
 import { TRegisterInput, TVerifyOtpInput, TLoginInput, TForgetPasswordInput } from "./user.validation";
 import { envVars } from "../../../config/envConfig";
 
@@ -39,7 +39,7 @@ const registerUser = async (payload: TRegisterInput) => {
     // Save hashed password in OTP temporarily
     const hashedPassword = await bcrypt.hash(password, 12);
     console.log("🔵 Hashed password:", hashedPassword);
-    
+
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
@@ -47,13 +47,13 @@ const registerUser = async (payload: TRegisterInput) => {
         phone,
         otp,
         expiresAt,
-        purpose: "registration", 
-        userData: { 
-            name, 
-            email, 
-            phone, 
-            password: hashedPassword, 
-            gender 
+        purpose: "registration",
+        userData: {
+            name,
+            email,
+            phone,
+            password: hashedPassword,
+            gender
         },
     });
 
@@ -70,57 +70,60 @@ const verifyOtp = async (payload: TVerifyOtpInput) => {
 
     console.log("🟢 Verifying OTP for phone:", phone);
 
-    const otpDoc = await Otp.findOne({ phone, purpose: "registration" });
+    // OTP খুঁজে বের করা
+    const otpDoc = await Otp.findOne({
+        phone,
+        purpose: "registration",
+    });
+
     if (!otpDoc) {
-        throw new AppError(StatusCodes.NOT_FOUND, "No pending registration found for this phone number");
+        throw new AppError(
+            StatusCodes.NOT_FOUND,
+            "No pending registration found for this phone number"
+        );
     }
 
+    // OTP expire check
     if (otpDoc.expiresAt < new Date()) {
-        throw new AppError(StatusCodes.GONE, "OTP has expired. Please register again or use resend-otp");
+        throw new AppError(
+            StatusCodes.GONE,
+            "OTP expired. Please register again"
+        );
     }
 
+    // OTP match check
     if (otpDoc.otp !== otp) {
         throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid OTP");
     }
 
-    // Log the userData before creating user
-    console.log("🟢 OTP userData:", otpDoc.userData);
-    console.log("🟢 Password from OTP:", otpDoc.userData?.password);
+    // userData থেকে user create
+    const user = await User.create({
+        ...otpDoc.userData,
+        isVerified: true,
+    });
 
-    // ✅ Use the hashed password stored in OTP directly
-    const userData = {
-        name: otpDoc.userData?.name,
-        email: otpDoc.userData?.email,
-        phone: otpDoc.userData?.phone,
-        password: otpDoc.userData?.password, // This is already hashed
-        gender: otpDoc.userData?.gender,
-        isVerified: true
-    };
-
-    const user = await User.create(userData);
-    
-    // Verify the user was created with the hashed password
-    const createdUser = await User.findById(user._id).select("+password");
-    console.log("🟢 Created user password hash:", createdUser?.password);
-
+    // OTP delete
     await Otp.deleteOne({ _id: otpDoc._id });
 
-    // Generate JWT token for auto-login
+    // JWT token generate
     const token = jwt.sign(
         {
             id: user._id,
             phone: user.phone,
             email: user.email,
             role: user.role,
-            isProfileCompleted: user.isProfileCompleted,
             isVerified: user.isVerified,
+            isProfileCompleted: user.isProfileCompleted,
         },
-        envVars.JWT_SECRET,
-        { expiresIn: envVars.JWT_EXPIRES_IN as `${number}${'s' | 'm' | 'h' | 'd'}` }
+        envVars.JWT_SECRET as string,
+        {
+            expiresIn: envVars.JWT_EXPIRES_IN as `${number}${"s" | "m" | "h" | "d"}`,
+        }
     );
 
     return {
         message: "Phone verified successfully. Account created!",
+        token,
         user: {
             _id: user._id,
             name: user.name,
@@ -129,8 +132,8 @@ const verifyOtp = async (payload: TVerifyOtpInput) => {
             gender: user.gender,
             role: user.role,
             isVerified: user.isVerified,
+            isProfileCompleted: user.isProfileCompleted,
         },
-        token, // ✅ Auto-login token
     };
 };
 
@@ -162,62 +165,96 @@ const resendOtp = async (phone: string) => {
 const loginUser = async (payload: TLoginInput) => {
     const { identifier, password } = payload;
 
-    console.log("🟡 Login attempt for identifier:", identifier);
-    console.log("🟡 Provided password:", password);
+    console.log("🟡 Login attempt:", identifier);
 
-    // Find user by phone or email
+    // ───── 1️⃣ Check verified users ─────
+
     const user = await User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
         isDeleted: false,
     }).select("+password");
 
-    if (!user) {
-        console.log("🟡 User not found");
-        throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid phone/email or password");
+    if (user) {
+        if (user.isBlocked) {
+            throw new AppError(StatusCodes.FORBIDDEN, "Your account has been blocked");
+        }
+
+        if (!user.isVerified) {
+            throw new AppError(StatusCodes.FORBIDDEN, "Please verify your account first");
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+
+        if (!isMatch) {
+            throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid credentials");
+        }
+
+        const token = jwt.sign(
+            {
+                id: user._id,
+                phone: user.phone,
+                email: user.email,
+                role: user.role,
+                isProfileCompleted: user.isProfileCompleted,
+                isVerified: user.isVerified,
+            },
+            envVars.JWT_SECRET as string,
+            {
+                expiresIn: envVars.JWT_EXPIRES_IN as `${number}${"s" | "m" | "h" | "d"}`,
+            }
+        );
+
+        return {
+            message: "Login successful",
+            token,
+            user,
+        };
     }
 
-    if (user.isBlocked) {
-        throw new AppError(StatusCodes.FORBIDDEN, "Your account has been blocked");
+    // ───── 2️⃣ Check OTP pending users ─────
+
+    const otpDoc = await Otp.findOne({
+        $or: [{ phone: identifier }, { "userData.email": identifier }],
+        purpose: "registration",
+    });
+
+    if (!otpDoc) {
+        throw new AppError(StatusCodes.UNAUTHORIZED, "Account not found");
     }
 
-    if (!user.isVerified) {
-        throw new AppError(StatusCodes.FORBIDDEN, "Please verify your phone/email first");
+    if (otpDoc.expiresAt < new Date()) {
+        throw new AppError(StatusCodes.GONE, "OTP expired. Please register again");
     }
 
-    // Compare passwords
-    const isMatch = await bcrypt.compare(password, user.password);
-    console.log("🟡 Password match result:", isMatch);
+    const isMatch = await bcrypt.compare(password, otpDoc.userData.password);
 
     if (!isMatch) {
-        throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid phone/email or password");
+        throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid credentials");
     }
 
-    // Generate JWT token
     const token = jwt.sign(
         {
-            id: user._id,
-            phone: user.phone,
-            email: user.email,
-            role: user.role,
-            isProfileCompleted: user.isProfileCompleted,
-            isVerified: user.isVerified,
+            phone: otpDoc.userData.phone,
+            email: otpDoc.userData.email,
+            role: "user",
+            isVerified: false,
+            pendingRegistration: true,
         },
-        envVars.JWT_SECRET,
-        { expiresIn: envVars.JWT_EXPIRES_IN as `${number}${'s' | 'm' | 'h' | 'd'}` }
+        envVars.JWT_SECRET as string,
+        {
+            expiresIn: envVars.JWT_EXPIRES_IN as `${number}${"s" | "m" | "h" | "d"}`,
+        }
     );
 
     return {
-        message: "Login successful",
+        message: "Login successful (pending verification)",
         token,
         user: {
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-            gender: user.gender,
-            role: user.role,
-            isProfileCompleted: user.isProfileCompleted,
-            isVerified: user.isVerified,
+            name: otpDoc.userData.name,
+            email: otpDoc.userData.email,
+            phone: otpDoc.userData.phone,
+            gender: otpDoc.userData.gender,
+            isVerified: false,
         },
     };
 };
@@ -303,11 +340,11 @@ const getMe = async (userId: string) => {
 // ─── Update User ──────────────────────────────────────────────────────────────
 const updateUser = async (userId: string, payload: Partial<IUser>) => {
     const user = await User.findByIdAndUpdate(
-        userId, 
-        payload, 
+        userId,
+        payload,
         { new: true, runValidators: true }
     ).lean();
-    
+
     if (!user) {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
@@ -321,11 +358,11 @@ const deleteUser = async (userId: string, requestUser: { id: string; role: strin
     }
 
     const user = await User.findByIdAndUpdate(
-        userId, 
-        { isDeleted: true }, 
+        userId,
+        { isDeleted: true },
         { new: true }
     );
-    
+
     if (!user) {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
@@ -339,11 +376,11 @@ const updateBlockStatus = async (userId: string, isBlocked: boolean, requestUser
     }
 
     const user = await User.findByIdAndUpdate(
-        userId, 
-        { isBlocked }, 
+        userId,
+        { isBlocked },
         { new: true }
     ).lean();
-    
+
     if (!user) {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
@@ -356,7 +393,7 @@ export const UserService = {
     verifyOtp,
     resendOtp,
     loginUser,
-    forgetPassword, 
+    forgetPassword,
     getMe,
     updateUser,
     deleteUser,
