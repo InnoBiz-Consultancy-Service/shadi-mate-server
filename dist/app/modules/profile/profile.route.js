@@ -9,7 +9,7 @@ const auth_middleware_1 = require("../../../middleWares/auth.middleware");
 const profile_controller_1 = require("./profile.controller");
 const router = express_1.default.Router();
 // ─── Create Profile ─────────────────────────
-router.post("/create-profile", auth_middleware_1.authenticate, profile_controller_1.ProfileController.createProfile);
+router.post("/", auth_middleware_1.authenticate, profile_controller_1.ProfileController.createProfile);
 // ─── Update Profile ─────────────────────────
-router.patch("/update-profile", auth_middleware_1.authenticate, profile_controller_1.ProfileController.updateProfile);
+router.patch("/", auth_middleware_1.authenticate, profile_controller_1.ProfileController.updateProfile);
 exports.ProfileRoutes = router;

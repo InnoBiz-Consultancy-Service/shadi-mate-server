@@ -166,14 +166,7 @@ const loginUser = async (payload: TLoginInput) => {
     return {
         message: "Login successful",
         token,
-        user: {
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-            gender: user.gender,
-            role: user.role,
-        },
+       
     };
 };
 

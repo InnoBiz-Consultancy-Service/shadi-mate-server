@@ -56,7 +56,9 @@ const login = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 
         statusCode: http_status_codes_1.StatusCodes.OK,
         success: true,
         message: result.message,
-        data: result.user,
+        data: {
+            token: result.token,
+        },
     });
 }));
 // ─── Get Me (Protected) ───────────────────────────────────────────────────────

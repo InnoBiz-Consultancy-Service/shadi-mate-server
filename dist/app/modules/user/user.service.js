@@ -118,20 +118,12 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
         id: user._id,
         phone: user.phone,
         role: user.role,
-        isProfileCompleted: user.isProfileCompleted
+        isProfileCompleted: user.isProfileCompleted,
+        isVerified: user.isVerified,
     }, envConfig_1.envVars.JWT_SECRET, { expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN });
     return {
         message: "Login successful",
         token,
-        user: {
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-            gender: user.gender,
-            role: user.role,
-            isVerified: user.isVerified,
-        },
     };
 });
 // ─── Get Me ───────────────────────────────────────────────────────────────────
