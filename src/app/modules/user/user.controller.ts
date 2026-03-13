@@ -50,13 +50,13 @@ const login = catchAsync(async (req: Request, res: Response) => {
         success: true,
         message: result.message,
         data: {
-            token: result.token, 
+            token: result.token,
         },
     });
 });
 // ─── Forget Password (New Controller) ─────────────────────────────────────────
-const forgetPassword = catchAsync(async (req: Request, res: Response) => {
-    const result = await UserService.forgetPassword(req.body);
+const resetPassword = catchAsync(async (req: Request, res: Response) => {
+    const result = await UserService.resetPassword(req.body);
 
     if (result.token) {
         res.cookie("accessToken", result.token, {
@@ -157,15 +157,42 @@ const updateBlockStatus = catchAsync(async (req: Request, res: Response) => {
         data: result,
     });
 });
+const verifyResetOtp = catchAsync(async (req: Request, res: Response) => {
+
+    const result = await UserService.verifyResetOtp(req.body);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: result.message,
+    });
+
+});
+const forgotPassword = catchAsync(async (req: Request, res: Response) => {
+    const { identifier } = req.body;
+    const result = await UserService.forgotPassword(identifier);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: result.message,
+        data: {
+            otp: result.otp // development only
+        }
+    });
+
+});
 
 export const UserController = {
     register,
     verifyOtp,
     login,
-    forgetPassword,
+    resetPassword,
     getMe,
     resendOtp,
     updateUser,
     deleteUser,
     updateBlockStatus,
+    forgotPassword,
+    verifyResetOtp,
 };
