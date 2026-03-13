@@ -5,6 +5,7 @@ import app from "./app";
 import { envVars } from "./config/envConfig";
 import { seedSuperAdmin } from "./utils/seedSuperAdmin";
 import { seedGeoData } from "./utils/seedGeoData";
+import { seedPersonalityQuestions } from "./utils/seedPersonalityQuestions";
 
 
 
@@ -26,6 +27,7 @@ const startServer = async () => {
 }
 seedSuperAdmin()
 seedGeoData()
+seedPersonalityQuestions()
 startServer()
 
 process.on("SIGTERM", () => {

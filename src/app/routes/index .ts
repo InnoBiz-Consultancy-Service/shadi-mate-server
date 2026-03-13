@@ -2,6 +2,7 @@ import { Router } from "express"
 import UserRoutes from "../modules/user/user.router"
 import GeoRoutes from "../modules/geo/geo.router"
 import { ProfileRoutes } from "../modules/profile/profile.route"
+import { PersonalityQuestionRoutes } from "../modules/personalityQuestion/personalityQuestions.route"
 
 export const router = Router()
 
@@ -17,6 +18,10 @@ const moduleRoutes = [
     {
         path: "/profile",
         route: ProfileRoutes
+    },
+    {
+        path: "/personality-test",
+        route: PersonalityQuestionRoutes
     }
 ]
 
@@ -25,8 +30,3 @@ moduleRoutes.forEach((route) => {
     router.use(route.path, route.route)
 })
 
-// router.use("/user", UserRoutes)
-// router.use("/tour", TourRoutes)
-// router.use("/division", DivisionRoutes)
-// router.use("/booking", BookingRoutes)
-// router.use("/user", UserRoutes)
