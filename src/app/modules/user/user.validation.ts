@@ -43,20 +43,20 @@ export const verifyOtpSchema = z.object({
 });
 
 // ─── Forget Password (New) ───────────────────────────────────────────────────
-export const forgetPasswordSchema = z.object({
+export const resetPasswordSchema = z.object({
     body: z.object({
         identifier: z
             .string({ error: "Phone number or email is required" })
             .min(3, "Identifier must be at least 3 characters"),
-        
+
         oldPassword: z
             .string({ error: "Current password is required" })
             .min(6, "Password must be at least 6 characters"),
-        
+
         newPassword: z
             .string({ error: "New password is required" })
             .min(6, "New password must be at least 6 characters"),
-        
+
         confirmPassword: z
             .string({ error: "Please confirm your new password" })
             .min(6, "Confirm password must be at least 6 characters"),
@@ -71,17 +71,21 @@ export const forgetPasswordSchema = z.object({
 
 // ─── Login ────────────────────────────────────────────────────────────────────
 export const loginSchema = z.object({
-  body: z.object({
-    identifier: z
-      .string({ error: "Phone number or email is required" })
-      .min(3, "Identifier must be at least 3 characters"),
-    password: z
-      .string({ error: "Password is required" })
-      .min(6, "Password must be at least 6 characters"),
-  }),
+    body: z.object({
+        identifier: z
+            .string({ error: "Phone number or email is required" })
+            .min(3, "Identifier must be at least 3 characters"),
+        password: z
+            .string({ error: "Password is required" })
+            .min(6, "Password must be at least 6 characters"),
+    }),
 });
+
+
 
 export type TRegisterInput = z.infer<typeof registerSchema>["body"];
 export type TVerifyOtpInput = z.infer<typeof verifyOtpSchema>["body"];
 export type TLoginInput = z.infer<typeof loginSchema>["body"];
-export type TForgetPasswordInput = z.infer<typeof forgetPasswordSchema>["body"];
+export type TResetPasswordInput = z.infer<typeof resetPasswordSchema>["body"];
+
+

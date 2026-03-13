@@ -82,7 +82,7 @@ const OtpSchema = new Schema<IOtp>({
 
     purpose: {
         type: String,
-        enum: ["registration"],
+        enum: ["registration", "forgot-password"],
         default: "registration",
     },
 

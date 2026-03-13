@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { UserController } from "./user.controller";
 import { validateRequest } from "../../../middleWares/validateRequest";
-import { forgetPasswordSchema, loginSchema, registerSchema, verifyOtpSchema } from "./user.validation";
+import { resetPasswordSchema, loginSchema, registerSchema, verifyOtpSchema } from "./user.validation";
 import { authenticate } from "../../../middleWares/auth.middleware";
 
 const UserRoutes = Router();
@@ -9,7 +9,7 @@ const UserRoutes = Router();
 // ─── Public Routes ────────────────────────────────────────────────────────────
 
 
- 
+
 UserRoutes.post(
   "/",
   validateRequest(registerSchema),
@@ -37,10 +37,22 @@ UserRoutes.post("/resend-otp", UserController.resendOtp);
 UserRoutes.get("/me", authenticate, UserController.getMe);
 UserRoutes.patch("/", authenticate, UserController.updateUser);
 UserRoutes.post(
-    "/forget-password",
-    validateRequest(forgetPasswordSchema),  
-    UserController.forgetPassword
+  "/reset-password",
+  validateRequest(resetPasswordSchema),
+  UserController.resetPassword
 );
+
+
+UserRoutes.post(
+  "/forgot-password",
+  UserController.forgotPassword
+);
+
+UserRoutes.post(
+  "/verify-reset-otp",
+  UserController.verifyResetOtp
+);
+
 UserRoutes.patch("/delete-profile/:id", authenticate, UserController.deleteUser);
 UserRoutes.patch("/block-user/:id", authenticate, UserController.updateBlockStatus);
 

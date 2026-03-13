@@ -3,8 +3,8 @@ import jwt from "jsonwebtoken";
 import { StatusCodes } from "http-status-codes";
 import AppError from "../../../helpers/AppError";
 import { User, Otp } from "./user.model";
-import { IUser, TUserRole } from "./user.interface";
-import { TRegisterInput, TVerifyOtpInput, TLoginInput, TForgetPasswordInput } from "./user.validation";
+import { IUser } from "./user.interface";
+import { TRegisterInput, TVerifyOtpInput, TLoginInput, TResetPasswordInput } from "./user.validation";
 import { envVars } from "../../../config/envConfig";
 
 // ─── Helper: Generate 6-digit OTP ─────────────────────────────────────────────
@@ -260,7 +260,7 @@ const loginUser = async (payload: TLoginInput) => {
 };
 
 // ─── Forget Password (New Function) ───────────────────────────────────────────
-const forgetPassword = async (payload: TForgetPasswordInput) => {
+const resetPassword = async (payload: TResetPasswordInput) => {
     const { identifier, oldPassword, newPassword } = payload;
 
     console.log("🟣 Forget password attempt for identifier:", identifier);
@@ -386,16 +386,101 @@ const updateBlockStatus = async (userId: string, isBlocked: boolean, requestUser
     }
     return user;
 };
+// ─── Forgot Password (verified users only) ─────────────────────────────
+const forgotPassword = async (identifier: string) => {
+    // Find verified user
+    const user = await User.findOne({
+        $or: [{ phone: identifier }, { email: identifier }],
+        isDeleted: false,
+        isVerified: true, // only verified users
+    });
 
+    if (!user) {
+        throw new AppError(StatusCodes.NOT_FOUND, "No verified account found with this phone/email");
+    }
+
+    if (user.isBlocked) {
+        throw new AppError(StatusCodes.FORBIDDEN, "Your account is blocked");
+    }
+
+    const otp = generateOtp();
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+    await Otp.findOneAndUpdate(
+        { phone: user.phone, purpose: "forgot-password" },
+        {
+            phone: user.phone,
+            otp,
+            expiresAt,
+            purpose: "forgot-password"
+        },
+        { upsert: true, new: true }
+    );
+
+    return {
+        message: "Password reset OTP sent",
+        otp, // dev only
+    };
+};
+
+// ─── Verify Reset OTP (verified users only) ────────────────────────────
+const verifyResetOtp = async (payload: {
+    identifier: string;
+    otp: string;
+    newPassword: string;
+}) => {
+    const { identifier, otp, newPassword } = payload;
+
+    // Only look for verified users
+    const user = await User.findOne({
+        $or: [{ phone: identifier }, { email: identifier }],
+        isDeleted: false,
+        isVerified: true
+    }).select("+password");
+
+    if (!user) {
+        throw new AppError(StatusCodes.NOT_FOUND, "No verified account found");
+    }
+
+    const otpDoc = await Otp.findOne({
+        phone: user.phone,
+        purpose: "forgot-password"
+    });
+
+    if (!otpDoc) {
+        throw new AppError(StatusCodes.NOT_FOUND, "No reset request found");
+    }
+
+    if (otpDoc.expiresAt < new Date()) {
+        throw new AppError(StatusCodes.GONE, "OTP expired");
+    }
+
+    if (otpDoc.otp !== otp) {
+        throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid OTP");
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    user.password = hashedPassword;
+    await user.save();
+
+    // delete OTP after successful reset
+    await Otp.deleteOne({ _id: otpDoc._id });
+
+    return {
+        message: "Password reset successful"
+    };
+};
 // ─── Exports ──────────────────────────────────────────────────────────────────
 export const UserService = {
     registerUser,
     verifyOtp,
     resendOtp,
     loginUser,
-    forgetPassword,
+    resetPassword,
     getMe,
     updateUser,
     deleteUser,
     updateBlockStatus,
+    forgotPassword,
+    verifyResetOtp,
 };
