@@ -9,17 +9,23 @@ import { router } from "./app/routes/index ";
 const app = express()
 
 app.use(express.json())
-app.use(cors())
+
+app.use(
+    cors({
+        origin: "https://shadimate-client.vercel.app",
+        credentials: true,
+    })
+)
 
 app.use(cookieParser());
+
 app.use("/api/v1", router)
 
 app.get("/", (req: Request, res: Response) => {
     res.status(200).json({
-        message: "Welcome to Shadi Mate  Server"
+        message: "Welcome to Shadi Mate Server"
     })
 })
-
 
 app.use(globalErrorHandler)
 
