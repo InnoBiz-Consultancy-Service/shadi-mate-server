@@ -71,8 +71,24 @@ const submitTest = async (payload: any) => {
 
     return result;
 };
+const getSingleResultFromDB = async (id: string) => {
+    const result = await GuestTestResult.findById(id)
+        .select("totalScore percentage range -_id");
+    return result;
+};
 
+const updateGuestProfileInDB = async (id: string, payload: { name: string; phone: string; gender: string }) => {
+    const result = await GuestTestResult.findByIdAndUpdate(
+        id,
+        { $set: payload },
+        { new: true, runValidators: true }
+    ).select("totalScore percentage range -_id");
+
+    return result;
+};
 export const PersonalityService = {
     getQuestions,
-    submitTest
+    submitTest,
+    getSingleResultFromDB,
+    updateGuestProfileInDB
 };
