@@ -25,10 +25,11 @@ const startServer = async () => {
         console.log(error);
     }
 }
+
+startServer()
 seedSuperAdmin()
 seedGeoData()
 seedPersonalityQuestions()
-startServer()
 
 process.on("SIGTERM", () => {
     console.log("SIGTERM signal recieved... Server shutting down..");

@@ -1,17 +1,72 @@
-import { model, Schema } from "mongoose";
+import mongoose from "mongoose";
 
-const personalityQuestionSchema = new Schema({
-    id: { type: String, required: true, unique: true },
-    gender: { type: String, enum: ['male', 'female'], required: true },
-    questionText: {
-        bn: { type: String, required: true },
-        en: { type: String, required: true }
+const optionSchema = new mongoose.Schema(
+    {
+        label: {
+            type: String,
+            enum: ["agree", "sometimes", "disagree"],
+            required: true
+        },
+        text: {
+            type: String,
+            required: true
+        },
+        score: {
+            type: Number,
+            required: true
+        }
     },
-    options: [{
-        label: { type: String, required: true },
-        bn: { type: String, required: true },
-        en: { type: String, required: true }
-    }],
-    note: { type: String }
-});
-export const PersonalityQuestion = model('PersonalityQuestion', personalityQuestionSchema);
+    { _id: false }
+);
+
+const personalityQuestionSchema = new mongoose.Schema(
+    {
+        text: {
+            type: String,
+            required: true
+        },
+
+        order: {
+            type: Number,
+            required: true
+        },
+
+        options: [optionSchema]
+    },
+    { timestamps: true }
+);
+
+export const PersonalityQuestion = mongoose.model(
+    "PersonalityQuestion",
+    personalityQuestionSchema
+);
+
+
+const guestTestResultSchema = new mongoose.Schema(
+    {
+        name: String,
+        phone: String,
+        gender: String,
+        matchIds: [mongoose.Schema.Types.ObjectId],
+
+        answers: [
+            {
+                questionId: mongoose.Schema.Types.ObjectId,
+                selectedOption: {
+                    type: String,
+                    enum: ["agree", "sometimes", "disagree"]
+                }
+            }
+        ],
+
+        totalScore: Number,
+        percentage: Number,
+        range: String
+    },
+    { timestamps: true }
+);
+
+export const GuestTestResult = mongoose.model(
+    "GuestTestResult",
+    guestTestResultSchema
+);

@@ -237,6 +237,7 @@ const loginUser = async (payload: TLoginInput) => {
             phone: otpDoc.userData.phone,
             email: otpDoc.userData.email,
             role: "user",
+            gender: otpDoc.userData.gender,
             isVerified: false,
             pendingRegistration: true,
         },
