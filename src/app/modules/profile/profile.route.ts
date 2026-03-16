@@ -18,4 +18,10 @@ router.patch(
     ProfileController.updateProfile
 );
 
+// ─── Get Profiles (Search + Filter) ─────────────────
+router.get(
+    "/", authenticate,
+    ProfileController.getProfiles
+);
+
 export const ProfileRoutes = router;

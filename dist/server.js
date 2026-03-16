@@ -17,6 +17,7 @@ const app_1 = __importDefault(require("./app"));
 const envConfig_1 = require("./config/envConfig");
 const seedSuperAdmin_1 = require("./utils/seedSuperAdmin");
 const seedGeoData_1 = require("./utils/seedGeoData");
+const seedPersonalityQuestions_1 = require("./utils/seedPersonalityQuestions");
 let server;
 const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -30,9 +31,10 @@ const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
         console.log(error);
     }
 });
+startServer();
 (0, seedSuperAdmin_1.seedSuperAdmin)();
 (0, seedGeoData_1.seedGeoData)();
-startServer();
+(0, seedPersonalityQuestions_1.seedPersonalityQuestions)();
 process.on("SIGTERM", () => {
     console.log("SIGTERM signal recieved... Server shutting down..");
     if (server) {

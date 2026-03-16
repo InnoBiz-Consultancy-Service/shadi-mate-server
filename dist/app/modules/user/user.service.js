@@ -179,6 +179,7 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
         phone: otpDoc.userData.phone,
         email: otpDoc.userData.email,
         role: "user",
+        gender: otpDoc.userData.gender,
         isVerified: false,
         pendingRegistration: true,
     }, envConfig_1.envVars.JWT_SECRET, {
@@ -197,7 +198,7 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     };
 });
 // ─── Forget Password (New Function) ───────────────────────────────────────────
-const forgetPassword = (payload) => __awaiter(void 0, void 0, void 0, function* () {
+const resetPassword = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     const { identifier, oldPassword, newPassword } = payload;
     console.log("🟣 Forget password attempt for identifier:", identifier);
     // Find user by phone or email
@@ -286,15 +287,78 @@ const updateBlockStatus = (userId, isBlocked, requestUser) => __awaiter(void 0, 
     }
     return user;
 });
+// ─── Forgot Password (verified users only) ─────────────────────────────
+const forgotPassword = (identifier) => __awaiter(void 0, void 0, void 0, function* () {
+    // Find verified user
+    const user = yield user_model_1.User.findOne({
+        $or: [{ phone: identifier }, { email: identifier }],
+        isDeleted: false,
+        isVerified: true, // only verified users
+    });
+    if (!user) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "No verified account found with this phone/email");
+    }
+    if (user.isBlocked) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Your account is blocked");
+    }
+    const otp = generateOtp();
+    const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+    yield user_model_1.Otp.findOneAndUpdate({ phone: user.phone, purpose: "forgot-password" }, {
+        phone: user.phone,
+        otp,
+        expiresAt,
+        purpose: "forgot-password"
+    }, { upsert: true, new: true });
+    return {
+        message: "Password reset OTP sent",
+        otp, // dev only
+    };
+});
+// ─── Verify Reset OTP (verified users only) ────────────────────────────
+const verifyResetOtp = (payload) => __awaiter(void 0, void 0, void 0, function* () {
+    const { identifier, otp, newPassword } = payload;
+    // Only look for verified users
+    const user = yield user_model_1.User.findOne({
+        $or: [{ phone: identifier }, { email: identifier }],
+        isDeleted: false,
+        isVerified: true
+    }).select("+password");
+    if (!user) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "No verified account found");
+    }
+    const otpDoc = yield user_model_1.Otp.findOne({
+        phone: user.phone,
+        purpose: "forgot-password"
+    });
+    if (!otpDoc) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "No reset request found");
+    }
+    if (otpDoc.expiresAt < new Date()) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.GONE, "OTP expired");
+    }
+    if (otpDoc.otp !== otp) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid OTP");
+    }
+    const hashedPassword = yield bcryptjs_1.default.hash(newPassword, 12);
+    user.password = hashedPassword;
+    yield user.save();
+    // delete OTP after successful reset
+    yield user_model_1.Otp.deleteOne({ _id: otpDoc._id });
+    return {
+        message: "Password reset successful"
+    };
+});
 // ─── Exports ──────────────────────────────────────────────────────────────────
 exports.UserService = {
     registerUser,
     verifyOtp,
     resendOtp,
     loginUser,
-    forgetPassword,
+    resetPassword,
     getMe,
     updateUser,
     deleteUser,
     updateBlockStatus,
+    forgotPassword,
+    verifyResetOtp,
 };

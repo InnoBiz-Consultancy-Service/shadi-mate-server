@@ -12,4 +12,6 @@ const router = express_1.default.Router();
 router.post("/", auth_middleware_1.authenticate, profile_controller_1.ProfileController.createProfile);
 // ─── Update Profile ─────────────────────────
 router.patch("/", auth_middleware_1.authenticate, profile_controller_1.ProfileController.updateProfile);
+// ─── Get Profiles (Search + Filter) ─────────────────
+router.get("/", auth_middleware_1.authenticate, profile_controller_1.ProfileController.getProfiles);
 exports.ProfileRoutes = router;

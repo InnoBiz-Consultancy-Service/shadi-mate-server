@@ -14,7 +14,9 @@ UserRoutes.post("/resend-otp", user_controller_1.UserController.resendOtp);
 // ─── Protected Routes ─────────────────────────────────────────────────────────
 UserRoutes.get("/me", auth_middleware_1.authenticate, user_controller_1.UserController.getMe);
 UserRoutes.patch("/", auth_middleware_1.authenticate, user_controller_1.UserController.updateUser);
-UserRoutes.post("/forget-password", (0, validateRequest_1.validateRequest)(user_validation_1.forgetPasswordSchema), user_controller_1.UserController.forgetPassword);
+UserRoutes.post("/reset-password", (0, validateRequest_1.validateRequest)(user_validation_1.resetPasswordSchema), user_controller_1.UserController.resetPassword);
+UserRoutes.post("/forgot-password", user_controller_1.UserController.forgotPassword);
+UserRoutes.post("/verify-reset-otp", user_controller_1.UserController.verifyResetOtp);
 UserRoutes.patch("/delete-profile/:id", auth_middleware_1.authenticate, user_controller_1.UserController.deleteUser);
 UserRoutes.patch("/block-user/:id", auth_middleware_1.authenticate, user_controller_1.UserController.updateBlockStatus);
 exports.default = UserRoutes;

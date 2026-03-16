@@ -74,7 +74,7 @@ const OtpSchema = new mongoose_1.Schema({
     },
     purpose: {
         type: String,
-        enum: ["registration"],
+        enum: ["registration", "forgot-password"],
         default: "registration",
     },
     userData: {
