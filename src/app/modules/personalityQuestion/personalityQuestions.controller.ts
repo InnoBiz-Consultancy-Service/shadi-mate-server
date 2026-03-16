@@ -1,31 +1,36 @@
 import { Request, Response } from "express";
-import { PersonalityQuestionService } from "./personalityQuestions.service";
+import { StatusCodes } from "http-status-codes";
 import { catchAsync } from "../../../utils/catchAsync";
 import { sendResponse } from "../../../utils/sendResponse";
-import httpStatus from "http-status-codes";
-import AppError from "../../../helpers/AppError";
+import { PersonalityService } from "./personalityQuestions.service";
 
-const getPersonalityQuestions = catchAsync(async (req: Request, res: Response) => {
-    const { gender } = req.query;
 
-    if (gender && !['male', 'female'].includes(gender as string)) {
-        throw new AppError(httpStatus.BAD_REQUEST, "Invalid gender type provided!");
+export const getQuestions = catchAsync(
+    async (req: Request, res: Response) => {
+
+        const result = await PersonalityService.getQuestions();
+
+        sendResponse(res, {
+            statusCode: StatusCodes.OK,
+            success: true,
+            message: "Questions fetched successfully",
+            data: result
+        });
     }
+);
 
-    const result = await PersonalityQuestionService.getAllQuestionsFromDB(gender as string);
 
-    if (!result || result.length === 0) {
-        throw new AppError(httpStatus.NOT_FOUND, "No questions found!");
+export const submitTest = catchAsync(
+    async (req: Request, res: Response) => {
+
+        const result =
+            await PersonalityService.submitTest(req.body);
+
+        sendResponse(res, {
+            statusCode: StatusCodes.OK,
+            success: true,
+            message: "Personality test submitted successfully",
+            data: result
+        });
     }
-
-    sendResponse(res, {
-        statusCode: httpStatus.OK,
-        success: true,
-        message: "Personality questions fetched successfully",
-        data: result,
-    });
-});
-
-export const PersonalityQuestionController = {
-    getPersonalityQuestions
-};
+);
