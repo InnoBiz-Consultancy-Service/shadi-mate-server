@@ -12,3 +12,16 @@ export enum GuardianRelation {
     AUNT = "aunt",
     GUARDIAN = "guardian",
 }
+
+export interface QueryParams {
+    search?: string;
+    university?: string;
+    division?: string;
+    district?: string;
+    thana?: string;
+    gender?: string;
+    address?: string;
+    page?: number;
+    limit?: number;
+    sort?: string;
+}

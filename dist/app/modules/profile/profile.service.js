@@ -58,7 +58,88 @@ const updateProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
     });
     return profile;
 });
+const getProfiles = (query) => __awaiter(void 0, void 0, void 0, function* () {
+    const { search, university, division, district, gender } = query;
+    const pipeline = [];
+    // join user
+    pipeline.push({
+        $lookup: {
+            from: "users",
+            localField: "userId",
+            foreignField: "_id",
+            as: "user"
+        }
+    });
+    pipeline.push({ $unwind: "$user" });
+    // join university
+    pipeline.push({
+        $lookup: {
+            from: "universities",
+            localField: "universityId",
+            foreignField: "_id",
+            as: "university"
+        }
+    });
+    pipeline.push({
+        $unwind: {
+            path: "$university",
+            preserveNullAndEmptyArrays: true
+        }
+    });
+    // join division
+    pipeline.push({
+        $lookup: {
+            from: "divisions",
+            localField: "address.divisionId",
+            foreignField: "_id",
+            as: "division"
+        }
+    });
+    pipeline.push({ $unwind: "$division" });
+    // join district
+    pipeline.push({
+        $lookup: {
+            from: "districts",
+            localField: "address.districtId",
+            foreignField: "_id",
+            as: "district"
+        }
+    });
+    pipeline.push({ $unwind: "$district" });
+    const match = {};
+    // gender filter
+    if (gender) {
+        match["user.gender"] = gender;
+    }
+    // university name search
+    if (university) {
+        match["university.name"] = { $regex: university, $options: "i" };
+    }
+    // division name search
+    if (division) {
+        match["division.name"] = { $regex: division, $options: "i" };
+    }
+    // district name search
+    if (district) {
+        match["district.name"] = { $regex: district, $options: "i" };
+    }
+    // general search
+    if (search && search.trim() !== "") {
+        const searchRegex = new RegExp(search.trim(), "i");
+        match.$or = [
+            { "user.name": searchRegex },
+            { guardianContact: searchRegex },
+            { collegeName: searchRegex }
+        ];
+    }
+    if (Object.keys(match).length) {
+        pipeline.push({ $match: match });
+    }
+    const profiles = yield profile_model_1.Profile.aggregate(pipeline);
+    return profiles;
+});
 exports.ProfileService = {
     createProfile,
-    updateProfile
+    updateProfile,
+    getProfiles
 };

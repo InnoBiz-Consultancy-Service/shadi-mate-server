@@ -34,7 +34,24 @@ const updateProfile = catchAsync(async (req: Request, res: Response) => {
 
 });
 
+
+// ─── Get Profiles (Search + Filter) ─────────────────
+
+const getProfiles = catchAsync(async (req: Request, res: Response) => {
+
+    const result = await ProfileService.getProfiles(req.query);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: "Profiles retrieved successfully",
+        data: result
+    });
+
+});
+
 export const ProfileController = {
     createProfile,
-    updateProfile
+    updateProfile,
+    getProfiles
 };

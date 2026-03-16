@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.loginSchema = exports.forgetPasswordSchema = exports.verifyOtpSchema = exports.registerSchema = void 0;
+exports.loginSchema = exports.resetPasswordSchema = exports.verifyOtpSchema = exports.registerSchema = void 0;
 const zod_1 = require("zod");
 // ─── Register ─────────────────────────────────────────────────────────────────
 exports.registerSchema = zod_1.z.object({
@@ -36,7 +36,7 @@ exports.verifyOtpSchema = zod_1.z.object({
     }),
 });
 // ─── Forget Password (New) ───────────────────────────────────────────────────
-exports.forgetPasswordSchema = zod_1.z.object({
+exports.resetPasswordSchema = zod_1.z.object({
     body: zod_1.z.object({
         identifier: zod_1.z
             .string({ error: "Phone number or email is required" })

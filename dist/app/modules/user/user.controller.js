@@ -62,8 +62,8 @@ const login = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 
     });
 }));
 // ─── Forget Password (New Controller) ─────────────────────────────────────────
-const forgetPassword = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield user_service_1.UserService.forgetPassword(req.body);
+const resetPassword = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield user_service_1.UserService.resetPassword(req.body);
     if (result.token) {
         res.cookie("accessToken", result.token, {
             httpOnly: true,
@@ -146,14 +146,36 @@ const updateBlockStatus = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(v
         data: result,
     });
 }));
+const verifyResetOtp = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const result = yield user_service_1.UserService.verifyResetOtp(req.body);
+    (0, sendResponse_1.sendResponse)(res, {
+        statusCode: http_status_codes_1.StatusCodes.OK,
+        success: true,
+        message: result.message,
+    });
+}));
+const forgotPassword = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { identifier } = req.body;
+    const result = yield user_service_1.UserService.forgotPassword(identifier);
+    (0, sendResponse_1.sendResponse)(res, {
+        statusCode: http_status_codes_1.StatusCodes.OK,
+        success: true,
+        message: result.message,
+        data: {
+            otp: result.otp // development only
+        }
+    });
+}));
 exports.UserController = {
     register,
     verifyOtp,
     login,
-    forgetPassword,
+    resetPassword,
     getMe,
     resendOtp,
     updateUser,
     deleteUser,
     updateBlockStatus,
+    forgotPassword,
+    verifyResetOtp,
 };
