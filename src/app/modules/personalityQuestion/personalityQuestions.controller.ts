@@ -34,3 +34,26 @@ export const submitTest = catchAsync(
         });
     }
 );
+export const updateGuestProfile = catchAsync(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const result = await PersonalityService.updateGuestProfileInDB(id, req.body);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: "Profile updated and result generated successfully",
+        data: result,
+    });
+});
+
+export const getSingleResult = catchAsync(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const result = await PersonalityService.getSingleResultFromDB(id);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: "Result fetched successfully",
+        data: result,
+    });
+});
