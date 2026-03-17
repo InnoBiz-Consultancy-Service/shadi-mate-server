@@ -49,9 +49,35 @@ const getProfiles = catchAsync(async (req: Request, res: Response) => {
     });
 
 });
+// ─── Get My Profile ─────────────────────────
+const getMyProfile = catchAsync(async (req: Request, res: Response) => {
+    const userId = req.user!.id; // token থেকে userId
+    const profile = await ProfileService.getMyProfile(userId);
 
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: "My profile retrieved successfully",
+        data: profile
+    });
+});
+
+// ─── Get Profile by ID ─────────────────────────
+const getProfileById = catchAsync(async (req: Request, res: Response) => {
+    const profileId = req.params.id; // URL param থেকে ID
+    const profile = await ProfileService.getProfileById(profileId);
+
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: "Profile retrieved successfully",
+        data: profile
+    });
+});
 export const ProfileController = {
     createProfile,
     updateProfile,
-    getProfiles
+    getProfiles,
+    getMyProfile,
+    getProfileById
 };

@@ -158,9 +158,42 @@ const getProfiles = async (query: QueryParams) => {
 
     return result;
 };
+// ─── Get My Profile ─────────────────────────
+const getMyProfile = async (userId: string) => {
+    if (!userId) throw new AppError(StatusCodes.BAD_REQUEST, "User ID is required");
+
+    const profile = await Profile.findOne({ userId })
+        .populate("userId", "name phone gender")
+        .populate("universityId", "name")
+        .populate("address.divisionId", "name")
+        .populate("address.districtId", "name")
+        .populate("address.thanaId", "name");
+
+    if (!profile) throw new AppError(StatusCodes.NOT_FOUND, "Profile not found");
+
+    return profile;
+};
+
+// ─── Get Profile by ID ─────────────────────────
+const getProfileById = async (profileId: string) => {
+    if (!profileId) throw new AppError(StatusCodes.BAD_REQUEST, "Profile ID is required");
+
+    const profile = await Profile.findById(profileId)
+        .populate("userId", "name phone gender")
+        .populate("universityId", "name")
+        .populate("address.divisionId", "name")
+        .populate("address.districtId", "name")
+        .populate("address.thanaId", "name");
+
+    if (!profile) throw new AppError(StatusCodes.NOT_FOUND, "Profile not found");
+
+    return profile;
+};
 
 export const ProfileService = {
     createProfile,
     updateProfile,
-    getProfiles
+    getProfiles,
+    getMyProfile,
+    getProfileById
 };
