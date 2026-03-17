@@ -24,4 +24,18 @@ router.get(
     ProfileController.getProfiles
 );
 
+// ─── Get My Profile ─────────────────────────
+router.get(
+    "/my",
+    authenticate,
+    ProfileController.getMyProfile
+);
+
+// ─── Get Profile by ID ─────────────────────────
+router.get(
+    "/:id",
+    authenticate,
+    ProfileController.getProfileById
+);
+
 export const ProfileRoutes = router;
