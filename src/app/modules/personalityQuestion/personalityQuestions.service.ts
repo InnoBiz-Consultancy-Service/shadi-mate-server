@@ -1,3 +1,5 @@
+import { StatusCodes } from "http-status-codes";
+import AppError from "../../../helpers/AppError";
 import { PersonalityQuestion, GuestTestResult } from "./personalityQuestions.model";
 
 const getQuestions = async () => {
@@ -71,9 +73,27 @@ const submitTest = async (payload: any) => {
 
     return result;
 };
-const getSingleResultFromDB = async (id: string) => {
-    const result = await GuestTestResult.findById(id)
-        .select("totalScore percentage range -_id");
+const getSingleResultFromDB = async (id: string, phone: string) => {
+
+    if (!phone) {
+        throw new AppError(
+            StatusCodes.BAD_REQUEST,
+            "Phone number is required to get result"
+        );
+    }
+
+    const result = await GuestTestResult.findOne({
+        _id: id,
+        phone: phone
+    }).select("totalScore percentage range -_id");
+
+    if (!result) {
+        throw new AppError(
+            StatusCodes.NOT_FOUND,
+            "Result not found or unauthorized access"
+        );
+    }
+
     return result;
 };
 
