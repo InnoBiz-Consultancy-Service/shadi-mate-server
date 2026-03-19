@@ -19,11 +19,16 @@ export const createProfileValidation = z.object({
             divisionId: z.string(),
             districtId: z.string(),
             thanaId: z.string(),
-            details: z.string(),
+            details: z.string().optional(),
         }),
 
         universityId: z.string().optional(),
 
         collegeName: z.string().optional(),
+
+        BirthDate: z.string().optional(),
+        economicalStatus: z.string().optional(),
+        salaryRange: z.string().optional(),
+        profession: z.string().optional(),
     }),
 });

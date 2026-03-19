@@ -1,5 +1,5 @@
 import { Schema, model } from "mongoose";
-import {  GuardianRelation } from "./profile.interface";
+import { GuardianRelation, Personality } from "./profile.interface";
 
 const addressSchema = new Schema(
     {
@@ -28,7 +28,7 @@ const addressSchema = new Schema(
 
 const profileSchema = new Schema(
     {
-       
+
 
         guardianContact: {
             type: String,
@@ -39,6 +39,7 @@ const profileSchema = new Schema(
             ref: "User",
             required: true,
         },
+
 
         relation: {
             type: String,
@@ -56,6 +57,31 @@ const profileSchema = new Schema(
         collegeName: {
             type: String,
         },
+        personalityTestResult: {
+            type: Schema.Types.ObjectId,
+            ref: "GuestTestResult",
+        },
+        personalityTestPhone: {
+            type: String,
+            required: true,
+        },
+        personality: {
+            type: String,
+            enum: Object.values(Personality),
+        },
+        BirthDate: {
+            type: Date,
+        },
+        economicalStatus: {
+            type: String,
+        },
+        salaryRange: {
+            type: String,
+        },
+        profession: {
+            type: String,
+        },
+
     },
     {
         timestamps: true,

@@ -4,6 +4,7 @@ import { Profile } from "./profile.model";
 import { User } from "../user/user.model";
 import { AggregationBuilder } from "../../../utils/profileQueryBuilder";
 import { QueryParams } from "./profile.interface";
+import { GuestTestResult } from "../personalityQuestion/personalityQuestions.model";
 
 const checkProfileCompletion = (payload: any) => {
 
@@ -26,18 +27,40 @@ const checkProfileCompletion = (payload: any) => {
 // ─── Create Profile ─────────────────────────
 
 const createProfile = async (userId: string, payload: any) => {
-    if (!userId) throw new AppError(StatusCodes.BAD_REQUEST, "User ID is required");
-
-    const existing = await Profile.findOne({ userId });
-
-    if (existing) {
-        throw new AppError(StatusCodes.BAD_REQUEST, "Profile already exists");
+    if (!userId) {
+        throw new AppError(StatusCodes.BAD_REQUEST, "User ID is required");
     }
+
+    let phoneToUse = payload.personalityTestPhone;
+    let testMessage: string | null = null; // ✅ আগে declare
+
+    if (!phoneToUse) {
+        const user = await User.findById(userId).select("phone");
+
+        if (!user || !user.phone) {
+            throw new AppError(
+                StatusCodes.BAD_REQUEST,
+                "No phone number provided and user phone not found"
+            );
+        }
+
+        phoneToUse = user.phone;
+    }
+
+    const testResult = await GuestTestResult
+        .findOne({ phone: phoneToUse })
+        .sort({ createdAt: -1 });
 
     const profile = await Profile.create({
         ...payload,
-        userId
+        userId,
+        personalityTestPhone: phoneToUse,
+        personalityTestResult: testResult?._id || undefined,
     });
+
+    if (!testResult) {
+        testMessage = `No personality test found for phone: ${phoneToUse}`;
+    }
 
     const completed = checkProfileCompletion(payload);
 
@@ -45,9 +68,11 @@ const createProfile = async (userId: string, payload: any) => {
         isProfileCompleted: completed
     });
 
-    return profile;
+    return {
+        profile,
+        testMessage
+    };
 };
-
 
 // ─── Update Profile ─────────────────────────
 

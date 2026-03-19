@@ -14,4 +14,8 @@ router.post("/", auth_middleware_1.authenticate, profile_controller_1.ProfileCon
 router.patch("/", auth_middleware_1.authenticate, profile_controller_1.ProfileController.updateProfile);
 // ─── Get Profiles (Search + Filter) ─────────────────
 router.get("/", auth_middleware_1.authenticate, profile_controller_1.ProfileController.getProfiles);
+// ─── Get My Profile ─────────────────────────
+router.get("/my", auth_middleware_1.authenticate, profile_controller_1.ProfileController.getMyProfile);
+// ─── Get Profile by ID ─────────────────────────
+router.get("/:id", auth_middleware_1.authenticate, profile_controller_1.ProfileController.getProfileById);
 exports.ProfileRoutes = router;

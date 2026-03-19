@@ -17,6 +17,7 @@ const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const http_status_codes_1 = require("http-status-codes");
 const profile_model_1 = require("./profile.model");
 const user_model_1 = require("../user/user.model");
+const profileQueryBuilder_1 = require("../../../utils/profileQueryBuilder");
 const checkProfileCompletion = (payload) => {
     var _a, _b, _c, _d;
     if (payload.gender &&
@@ -59,87 +60,107 @@ const updateProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
     return profile;
 });
 const getProfiles = (query) => __awaiter(void 0, void 0, void 0, function* () {
-    const { search, university, division, district, gender } = query;
-    const pipeline = [];
-    // join user
-    pipeline.push({
-        $lookup: {
-            from: "users",
-            localField: "userId",
-            foreignField: "_id",
-            as: "user"
+    const { search, university, division, district, thana, gender, address, page = 1, limit = 10, sort = "-createdAt", } = query;
+    const builder = new profileQueryBuilder_1.AggregationBuilder(profile_model_1.Profile);
+    // Define lookup stages
+    const lookups = [
+        {
+            $lookup: {
+                from: "users",
+                localField: "userId",
+                foreignField: "_id",
+                as: "user"
+            }
+        },
+        {
+            $lookup: {
+                from: "universities",
+                localField: "universityId",
+                foreignField: "_id",
+                as: "university"
+            }
+        },
+        {
+            $lookup: {
+                from: "divisions",
+                localField: "address.divisionId",
+                foreignField: "_id",
+                as: "division"
+            }
+        },
+        {
+            $lookup: {
+                from: "districts",
+                localField: "address.districtId",
+                foreignField: "_id",
+                as: "district"
+            }
+        },
+        {
+            $lookup: {
+                from: "thanas",
+                localField: "address.thanaId",
+                foreignField: "_id",
+                as: "thana"
+            }
         }
-    });
-    pipeline.push({ $unwind: "$user" });
-    // join university
-    pipeline.push({
-        $lookup: {
-            from: "universities",
-            localField: "universityId",
-            foreignField: "_id",
-            as: "university"
-        }
-    });
-    pipeline.push({
-        $unwind: {
-            path: "$university",
-            preserveNullAndEmptyArrays: true
-        }
-    });
-    // join division
-    pipeline.push({
-        $lookup: {
-            from: "divisions",
-            localField: "address.divisionId",
-            foreignField: "_id",
-            as: "division"
-        }
-    });
-    pipeline.push({ $unwind: "$division" });
-    // join district
-    pipeline.push({
-        $lookup: {
-            from: "districts",
-            localField: "address.districtId",
-            foreignField: "_id",
-            as: "district"
-        }
-    });
-    pipeline.push({ $unwind: "$district" });
-    const match = {};
-    // gender filter
-    if (gender) {
-        match["user.gender"] = gender;
-    }
-    // university name search
-    if (university) {
-        match["university.name"] = { $regex: university, $options: "i" };
-    }
-    // division name search
-    if (division) {
-        match["division.name"] = { $regex: division, $options: "i" };
-    }
-    // district name search
-    if (district) {
-        match["district.name"] = { $regex: district, $options: "i" };
-    }
-    // general search
-    if (search && search.trim() !== "") {
-        const searchRegex = new RegExp(search.trim(), "i");
-        match.$or = [
-            { "user.name": searchRegex },
-            { guardianContact: searchRegex },
-            { collegeName: searchRegex }
-        ];
-    }
-    if (Object.keys(match).length) {
-        pipeline.push({ $match: match });
-    }
-    const profiles = yield profile_model_1.Profile.aggregate(pipeline);
-    return profiles;
+    ];
+    // Build and execute query
+    const result = yield builder
+        .addLookups(lookups)
+        .addRegexMatch("university.name", university)
+        .addRegexMatch("division.name", division)
+        .addRegexMatch("district.name", district)
+        .addRegexMatch("thana.name", thana)
+        .addRegexMatch("address.details", address)
+        .addMatch("user.gender", gender)
+        .addSearch(search, [
+        "user.name",
+        "guardianContact",
+        "collegeName",
+        "division.name",
+        "district.name",
+        "thana.name",
+        "university.name"
+    ])
+        .addSort(sort)
+        .addPagination(Number(page), Number(limit))
+        .build()
+        .execute();
+    return result;
+});
+// ─── Get My Profile ─────────────────────────
+const getMyProfile = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!userId)
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "User ID is required");
+    const profile = yield profile_model_1.Profile.findOne({ userId })
+        .populate("userId", "name phone gender")
+        .populate("universityId", "name")
+        .populate("address.divisionId", "name")
+        .populate("address.districtId", "name")
+        .populate("address.thanaId", "name");
+    if (!profile)
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Profile not found");
+    return profile;
+});
+// ─── Get Profile by ID ─────────────────────────
+const getProfileById = (profileId) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!profileId)
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Profile ID is required");
+    const profile = yield profile_model_1.Profile.findById(profileId)
+        .populate("userId", "name phone gender")
+        .populate("universityId", "name")
+        .populate("address.divisionId", "name")
+        .populate("address.districtId", "name")
+        .populate("address.thanaId", "name");
+    if (!profile)
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Profile not found");
+    return profile;
 });
 exports.ProfileService = {
     createProfile,
     updateProfile,
-    getProfiles
+    getProfiles,
+    getMyProfile,
+    getProfileById
 };

@@ -12,6 +12,16 @@ export enum GuardianRelation {
     AUNT = "aunt",
     GUARDIAN = "guardian",
 }
+export enum Personality {
+    SOCIAL_HEART = "Social Heart",
+    BALANCED_SOUL = "Balanced Soul",
+    PRIVATE_THINKER = "Private Thinker",
+}
+export enum EconomicalStatus {
+    LOW = "Low",
+    MEDIUM = "Medium",
+    HIGH = "High",
+}
 
 export interface QueryParams {
     search?: string;

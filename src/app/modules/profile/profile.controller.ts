@@ -13,8 +13,8 @@ const createProfile = catchAsync(async (req: Request, res: Response) => {
     sendResponse(res, {
         statusCode: StatusCodes.CREATED,
         success: true,
-        message: "Profile created successfully",
-        data: result
+        message: result.testMessage || "Profile created successfully",
+        data: result.profile
     });
 
 });
