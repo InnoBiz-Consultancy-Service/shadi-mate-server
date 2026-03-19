@@ -46,7 +46,7 @@ const getProfiles = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0,
 }));
 // ─── Get My Profile ─────────────────────────
 const getMyProfile = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const userId = req.user.id; // token থেকে userId
+    const userId = req.user.id;
     const profile = yield profile_service_1.ProfileService.getMyProfile(userId);
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.OK,
@@ -57,7 +57,7 @@ const getMyProfile = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0
 }));
 // ─── Get Profile by ID ─────────────────────────
 const getProfileById = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const profileId = req.params.id; // URL param থেকে ID
+    const profileId = req.params.id;
     const profile = yield profile_service_1.ProfileService.getProfileById(profileId);
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.OK,
