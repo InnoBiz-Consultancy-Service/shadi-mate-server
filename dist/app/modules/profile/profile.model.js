@@ -17,17 +17,17 @@ const addressSchema = new mongoose_1.Schema({
     thanaId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: "Thana",
-        required: true,
     },
     details: {
         type: String,
-        required: true,
     },
 }, { _id: false });
 const profileSchema = new mongoose_1.Schema({
-    guardianContact: {
+    fatherOccupation: {
         type: String,
-        required: true,
+    },
+    motherOccupation: {
+        type: String,
     },
     userId: {
         type: mongoose_1.Schema.Types.ObjectId,
@@ -51,9 +51,8 @@ const profileSchema = new mongoose_1.Schema({
         type: mongoose_1.Schema.Types.ObjectId,
         ref: "GuestTestResult",
     },
-    personalityTestPhone: {
+    personalityTestEmail: {
         type: String,
-        required: true,
     },
     personality: {
         type: String,

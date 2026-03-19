@@ -31,36 +31,31 @@ const createProfile = async (userId: string, payload: any) => {
         throw new AppError(StatusCodes.BAD_REQUEST, "User ID is required");
     }
 
-    let phoneToUse = payload.personalityTestPhone;
-    let testMessage: string | null = null; 
+    let emailToUse = payload.personalityTestEmail || null;
+    let testResult = null;
+    let testMessage: string | null = null;
 
-    if (!phoneToUse) {
-        const user = await User.findById(userId).select("phone");
-
-        if (!user || !user.phone) {
-            throw new AppError(
-                StatusCodes.BAD_REQUEST,
-                "No phone number provided and user phone not found"
-            );
-        }
-
-        phoneToUse = user.phone;
+    if (!emailToUse) {
+        const user = await User.findById(userId).select("email");
+        emailToUse = user?.email || null;
     }
 
-    const testResult = await GuestTestResult
-        .findOne({ phone: phoneToUse })
-        .sort({ createdAt: -1 });
+    if (emailToUse) {
+        testResult = await GuestTestResult
+            .findOne({ email: emailToUse })
+            .sort({ createdAt: -1 });
+
+        if (!testResult) {
+            testMessage = `No personality test found for email: ${emailToUse}`;
+        }
+    }
 
     const profile = await Profile.create({
         ...payload,
         userId,
-        personalityTestPhone: phoneToUse,
+        personalityTestEmail: emailToUse || undefined,
         personalityTestResult: testResult?._id || undefined,
     });
-
-    if (!testResult) {
-        testMessage = `No personality test found for phone: ${phoneToUse}`;
-    }
 
     const completed = checkProfileCompletion(payload);
 

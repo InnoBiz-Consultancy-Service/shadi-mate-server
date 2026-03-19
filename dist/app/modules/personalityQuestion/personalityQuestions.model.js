@@ -34,7 +34,7 @@ const personalityQuestionSchema = new mongoose_1.default.Schema({
 exports.PersonalityQuestion = mongoose_1.default.model("PersonalityQuestion", personalityQuestionSchema);
 const guestTestResultSchema = new mongoose_1.default.Schema({
     name: String,
-    phone: String,
+    email: String,
     gender: String,
     matchIds: [mongoose_1.default.Schema.Types.ObjectId],
     answers: [

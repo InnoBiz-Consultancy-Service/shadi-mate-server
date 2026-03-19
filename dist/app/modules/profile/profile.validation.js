@@ -4,7 +4,8 @@ exports.createProfileValidation = void 0;
 const zod_1 = require("zod");
 exports.createProfileValidation = zod_1.z.object({
     body: zod_1.z.object({
-        guardianContact: zod_1.z.string(),
+        fatherOccupation: zod_1.z.string().optional(),
+        motherOccupation: zod_1.z.string().optional(),
         relation: zod_1.z.enum([
             "father",
             "mother",
@@ -24,7 +25,6 @@ exports.createProfileValidation = zod_1.z.object({
         collegeName: zod_1.z.string().optional(),
         BirthDate: zod_1.z.string().optional(),
         economicalStatus: zod_1.z.string().optional(),
-        salaryRange: zod_1.z.string().optional(),
         profession: zod_1.z.string().optional(),
     }),
 });

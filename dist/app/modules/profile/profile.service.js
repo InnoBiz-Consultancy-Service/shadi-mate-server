@@ -38,22 +38,22 @@ const createProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
     if (!userId) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "User ID is required");
     }
-    let phoneToUse = payload.personalityTestPhone;
-    let testMessage = null; // ✅ আগে declare
-    if (!phoneToUse) {
-        const user = yield user_model_1.User.findById(userId).select("phone");
-        if (!user || !user.phone) {
-            throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "No phone number provided and user phone not found");
+    let emailToUse = payload.personalityTestEmail || null;
+    let testResult = null;
+    let testMessage = null;
+    if (!emailToUse) {
+        const user = yield user_model_1.User.findById(userId).select("email");
+        emailToUse = (user === null || user === void 0 ? void 0 : user.email) || null;
+    }
+    if (emailToUse) {
+        testResult = yield personalityQuestions_model_1.GuestTestResult
+            .findOne({ email: emailToUse })
+            .sort({ createdAt: -1 });
+        if (!testResult) {
+            testMessage = `No personality test found for email: ${emailToUse}`;
         }
-        phoneToUse = user.phone;
     }
-    const testResult = yield personalityQuestions_model_1.GuestTestResult
-        .findOne({ phone: phoneToUse })
-        .sort({ createdAt: -1 });
-    const profile = yield profile_model_1.Profile.create(Object.assign(Object.assign({}, payload), { userId, personalityTestPhone: phoneToUse, personalityTestResult: (testResult === null || testResult === void 0 ? void 0 : testResult._id) || undefined }));
-    if (!testResult) {
-        testMessage = `No personality test found for phone: ${phoneToUse}`;
-    }
+    const profile = yield profile_model_1.Profile.create(Object.assign(Object.assign({}, payload), { userId, personalityTestEmail: emailToUse || undefined, personalityTestResult: (testResult === null || testResult === void 0 ? void 0 : testResult._id) || undefined }));
     const completed = checkProfileCompletion(payload);
     yield user_model_1.User.findByIdAndUpdate(userId, {
         isProfileCompleted: completed

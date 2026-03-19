@@ -45,7 +45,7 @@ export const PersonalityQuestion = mongoose.model(
 const guestTestResultSchema = new mongoose.Schema(
     {
         name: String,
-        phone: String,
+        email: String,
         gender: String,
         matchIds: [mongoose.Schema.Types.ObjectId],
 

@@ -74,8 +74,8 @@ const getSingleResultFromDB = (id) => __awaiter(void 0, void 0, void 0, function
     if (!result) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Result not found");
     }
-    if (!result.phone) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Phone number is missing for this result");
+    if (!result.email) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Email is missing for this result");
     }
     const { totalScore, percentage, range } = result;
     return { totalScore, percentage, range };
