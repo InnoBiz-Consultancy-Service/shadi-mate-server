@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.GuardianRelation = exports.Gender = void 0;
+exports.EconomicalStatus = exports.Personality = exports.GuardianRelation = exports.Gender = void 0;
 var Gender;
 (function (Gender) {
     Gender["MALE"] = "male";
@@ -16,3 +16,15 @@ var GuardianRelation;
     GuardianRelation["AUNT"] = "aunt";
     GuardianRelation["GUARDIAN"] = "guardian";
 })(GuardianRelation || (exports.GuardianRelation = GuardianRelation = {}));
+var Personality;
+(function (Personality) {
+    Personality["SOCIAL_HEART"] = "Social Heart";
+    Personality["BALANCED_SOUL"] = "Balanced Soul";
+    Personality["PRIVATE_THINKER"] = "Private Thinker";
+})(Personality || (exports.Personality = Personality = {}));
+var EconomicalStatus;
+(function (EconomicalStatus) {
+    EconomicalStatus["LOW"] = "Low";
+    EconomicalStatus["MEDIUM"] = "Medium";
+    EconomicalStatus["HIGH"] = "High";
+})(EconomicalStatus || (exports.EconomicalStatus = EconomicalStatus = {}));

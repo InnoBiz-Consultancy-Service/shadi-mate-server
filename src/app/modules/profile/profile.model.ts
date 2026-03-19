@@ -16,11 +16,9 @@ const addressSchema = new Schema(
         thanaId: {
             type: Schema.Types.ObjectId,
             ref: "Thana",
-            required: true,
         },
         details: {
             type: String,
-            required: true,
         },
     },
     { _id: false }
@@ -30,10 +28,12 @@ const profileSchema = new Schema(
     {
 
 
-        guardianContact: {
-            type: String,
-            required: true,
-        },
+    fatherOccupation: {
+        type: String,
+    },
+    motherOccupation: {
+        type: String,
+    },
         userId: {
             type: Schema.Types.ObjectId,
             ref: "User",
@@ -63,7 +63,6 @@ const profileSchema = new Schema(
         },
         personalityTestPhone: {
             type: String,
-            required: true,
         },
         personality: {
             type: String,
