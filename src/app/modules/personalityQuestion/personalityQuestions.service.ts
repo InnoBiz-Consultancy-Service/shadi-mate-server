@@ -85,10 +85,10 @@ const getSingleResultFromDB = async (id: string) => {
         );
     }
 
-    if (!result.phone) {
+    if (!result.email) {
         throw new AppError(
             StatusCodes.BAD_REQUEST,
-            "Phone number is missing for this result"
+            "Email is missing for this result"
         );
     }
 
@@ -97,7 +97,7 @@ const getSingleResultFromDB = async (id: string) => {
     return { totalScore, percentage, range };
 };
 
-const updateGuestProfileInDB = async (id: string, payload: { name: string; phone: string; gender: string }) => {
+const updateGuestProfileInDB = async (id: string, payload: { name: string; email: string; gender: string }) => {
     const result = await GuestTestResult.findByIdAndUpdate(
         id,
         { $set: payload },
