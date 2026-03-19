@@ -266,7 +266,6 @@ const resetPassword = async (payload: TResetPasswordInput) => {
 
     console.log("🟣 Forget password attempt for identifier:", identifier);
 
-    // Find user by phone or email
     const user = await User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
         isDeleted: false,
@@ -285,7 +284,6 @@ const resetPassword = async (payload: TResetPasswordInput) => {
         throw new AppError(StatusCodes.FORBIDDEN, "Please verify your account first");
     }
 
-    // Verify old password
     const isOldPasswordMatch = await bcrypt.compare(oldPassword, user.password);
     console.log("🟣 Old password match result:", isOldPasswordMatch);
 
@@ -293,17 +291,14 @@ const resetPassword = async (payload: TResetPasswordInput) => {
         throw new AppError(StatusCodes.UNAUTHORIZED, "Current password is incorrect");
     }
 
-    // Hash the new password
     const hashedNewPassword = await bcrypt.hash(newPassword, 12);
     console.log("🟣 New password hashed successfully");
 
-    // Update password in database
     user.password = hashedNewPassword;
     await user.save();
 
     console.log("🟣 Password updated successfully for user:", user.phone);
 
-    // Generate new token for auto-login (optional)
     const token = jwt.sign(
         {
             id: user._id,
@@ -319,7 +314,7 @@ const resetPassword = async (payload: TResetPasswordInput) => {
 
     return {
         message: "Password changed successfully. Please login with your new password.",
-        token, // Optional: auto-login after password change
+        token, 
         user: {
             _id: user._id,
             name: user.name,
@@ -389,11 +384,10 @@ const updateBlockStatus = async (userId: string, isBlocked: boolean, requestUser
 };
 // ─── Forgot Password (verified users only) ─────────────────────────────
 const forgotPassword = async (identifier: string) => {
-    // Find verified user
     const user = await User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
         isDeleted: false,
-        isVerified: true, // only verified users
+        isVerified: true, 
     });
 
     if (!user) {
@@ -420,7 +414,7 @@ const forgotPassword = async (identifier: string) => {
 
     return {
         message: "Password reset OTP sent",
-        otp, // dev only
+        otp,
     };
 };
 
@@ -432,7 +426,6 @@ const verifyResetOtp = async (payload: {
 }) => {
     const { identifier, otp, newPassword } = payload;
 
-    // Only look for verified users
     const user = await User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
         isDeleted: false,
@@ -464,7 +457,6 @@ const verifyResetOtp = async (payload: {
     user.password = hashedPassword;
     await user.save();
 
-    // delete OTP after successful reset
     await Otp.deleteOne({ _id: otpDoc._id });
 
     return {

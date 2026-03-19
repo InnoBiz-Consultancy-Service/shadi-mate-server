@@ -31,8 +31,7 @@ export const seedGeoData = async () => {
                 console.log("✅ Cleared all existing geo data");
             }
 
-            // Seed all geo data fresh
-            console.log("🌱 Seeding fresh geo data...");
+          
 
             for (const divData of geoSeedData) {
                 // Create division - FIXED: Type assertion for _id
@@ -65,7 +64,7 @@ export const seedGeoData = async () => {
                 console.log(`     ├─ Districts: ${districtCount}, Thanas: ${thanaCount}`);
             }
 
-            console.log("✅ Seeded all divisions, districts, and thanas successfully!");
+          
 
             // Verify the counts
             const finalDivCount = await Division.countDocuments();
@@ -86,7 +85,7 @@ export const seedGeoData = async () => {
             console.log(`📊 Current counts - Divisions: ${divCount}, Districts: ${distCount}, Thanas: ${thanaCount}`);
         }
 
-        console.log("🎉 Database seeding completed!");
+ 
 
     } catch (error) {
         console.error("❌ Error seeding geo data:", error);

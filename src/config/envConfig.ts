@@ -11,10 +11,11 @@ interface EnvConfig {
     SUPER_ADMIN_EMAIL: string,
     SUPER_ADMIN_PASSWORD: string,
     BCRYPT_SALT_ROUND: string,
+    FRONTEND_URL: string
 }
 
 const loadEnvVariables = (): EnvConfig => {
-    const requiredEnvVariables: string[] = ["PORT", "DB_URL", "NODE_ENV", "JWT_SECRET", "JWT_EXPIRES_IN", "SUPER_ADMIN_EMAIL", "SUPER_ADMIN_PASSWORD", "BCRYPT_SALT_ROUND"];
+    const requiredEnvVariables: string[] = ["PORT", "DB_URL", "NODE_ENV", "JWT_SECRET", "JWT_EXPIRES_IN", "SUPER_ADMIN_EMAIL", "SUPER_ADMIN_PASSWORD", "BCRYPT_SALT_ROUND", "FRONTEND_URL"];
 
     requiredEnvVariables.forEach(key => {
         if (!process.env[key]) {
@@ -32,6 +33,8 @@ const loadEnvVariables = (): EnvConfig => {
         SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL as string,
         SUPER_ADMIN_PASSWORD: process.env.SUPER_ADMIN_PASSWORD as string,
         BCRYPT_SALT_ROUND: process.env.BCRYPT_SALT_ROUND as string,
+        FRONTEND_URL: process.env.FRONEND_URL as string
+
     }
 }
 
