@@ -3,6 +3,7 @@ import { StatusCodes } from "http-status-codes";
 import { catchAsync } from "../../../utils/catchAsync";
 import { sendResponse } from "../../../utils/sendResponse";
 import { PersonalityService } from "./personalityQuestions.service";
+import { PersonalityQuestion } from "./personalityQuestions.model";
 
 
 export const getQuestions = catchAsync(
@@ -48,6 +49,7 @@ export const updateGuestProfile = catchAsync(async (req: Request, res: Response)
 
 export const getSingleResult = catchAsync(async (req: Request, res: Response) => {
     const { id } = req.params;
+
     const result = await PersonalityService.getSingleResultFromDB(id);
 
     sendResponse(res, {

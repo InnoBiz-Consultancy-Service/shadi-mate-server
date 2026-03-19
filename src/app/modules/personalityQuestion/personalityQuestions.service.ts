@@ -73,28 +73,28 @@ const submitTest = async (payload: any) => {
 
     return result;
 };
-const getSingleResultFromDB = async (id: string, phone: string) => {
-
-    if (!phone) {
-        throw new AppError(
-            StatusCodes.BAD_REQUEST,
-            "Phone number is required to get result"
-        );
-    }
-
-    const result = await GuestTestResult.findOne({
-        _id: id,
-        phone: phone
-    }).select("totalScore percentage range -_id");
+const getSingleResultFromDB = async (id: string) => {
+    const result = await GuestTestResult.findById(id).select(
+        "totalScore percentage range phone -_id"
+    );
 
     if (!result) {
         throw new AppError(
             StatusCodes.NOT_FOUND,
-            "Result not found or unauthorized access"
+            "Result not found"
         );
     }
 
-    return result;
+    if (!result.phone) {
+        throw new AppError(
+            StatusCodes.BAD_REQUEST,
+            "Phone number is missing for this result"
+        );
+    }
+
+    const { totalScore, percentage, range } = result;
+
+    return { totalScore, percentage, range };
 };
 
 const updateGuestProfileInDB = async (id: string, payload: { name: string; phone: string; gender: string }) => {
