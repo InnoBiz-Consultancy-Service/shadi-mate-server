@@ -51,7 +51,7 @@ const getProfiles = catchAsync(async (req: Request, res: Response) => {
 });
 // ─── Get My Profile ─────────────────────────
 const getMyProfile = catchAsync(async (req: Request, res: Response) => {
-    const userId = req.user!.id; // token থেকে userId
+    const userId = req.user!.id; 
     const profile = await ProfileService.getMyProfile(userId);
 
     sendResponse(res, {
@@ -64,7 +64,7 @@ const getMyProfile = catchAsync(async (req: Request, res: Response) => {
 
 // ─── Get Profile by ID ─────────────────────────
 const getProfileById = catchAsync(async (req: Request, res: Response) => {
-    const profileId = req.params.id; // URL param থেকে ID
+    const profileId = req.params.id; 
     const profile = await ProfileService.getProfileById(profileId);
 
     sendResponse(res, {
