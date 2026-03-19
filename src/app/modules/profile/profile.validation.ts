@@ -3,7 +3,9 @@ import { z } from "zod";
 export const createProfileValidation = z.object({
     body: z.object({
 
-        guardianContact: z.string(),
+        fatherOccupation: z.string().optional(),
+        motherOccupation: z.string().optional(),
+
 
         relation: z.enum([
             "father",
@@ -28,7 +30,6 @@ export const createProfileValidation = z.object({
 
         BirthDate: z.string().optional(),
         economicalStatus: z.string().optional(),
-        salaryRange: z.string().optional(),
         profession: z.string().optional(),
     }),
 });

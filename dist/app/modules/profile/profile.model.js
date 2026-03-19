@@ -47,6 +47,30 @@ const profileSchema = new mongoose_1.Schema({
     collegeName: {
         type: String,
     },
+    personalityTestResult: {
+        type: mongoose_1.Schema.Types.ObjectId,
+        ref: "GuestTestResult",
+    },
+    personalityTestPhone: {
+        type: String,
+        required: true,
+    },
+    personality: {
+        type: String,
+        enum: Object.values(profile_interface_1.Personality),
+    },
+    BirthDate: {
+        type: Date,
+    },
+    economicalStatus: {
+        type: String,
+    },
+    salaryRange: {
+        type: String,
+    },
+    profession: {
+        type: String,
+    },
 }, {
     timestamps: true,
 });

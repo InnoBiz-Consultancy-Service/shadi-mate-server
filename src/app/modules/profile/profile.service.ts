@@ -32,7 +32,7 @@ const createProfile = async (userId: string, payload: any) => {
     }
 
     let phoneToUse = payload.personalityTestPhone;
-    let testMessage: string | null = null; // ✅ আগে declare
+    let testMessage: string | null = null; 
 
     if (!phoneToUse) {
         const user = await User.findById(userId).select("phone");

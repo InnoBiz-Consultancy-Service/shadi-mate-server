@@ -18,6 +18,7 @@ const http_status_codes_1 = require("http-status-codes");
 const profile_model_1 = require("./profile.model");
 const user_model_1 = require("../user/user.model");
 const profileQueryBuilder_1 = require("../../../utils/profileQueryBuilder");
+const personalityQuestions_model_1 = require("../personalityQuestion/personalityQuestions.model");
 const checkProfileCompletion = (payload) => {
     var _a, _b, _c, _d;
     if (payload.gender &&
@@ -34,18 +35,33 @@ const checkProfileCompletion = (payload) => {
 };
 // ─── Create Profile ─────────────────────────
 const createProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
-    if (!userId)
+    if (!userId) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "User ID is required");
-    const existing = yield profile_model_1.Profile.findOne({ userId });
-    if (existing) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Profile already exists");
     }
-    const profile = yield profile_model_1.Profile.create(Object.assign(Object.assign({}, payload), { userId }));
+    let phoneToUse = payload.personalityTestPhone;
+    let testMessage = null; // ✅ আগে declare
+    if (!phoneToUse) {
+        const user = yield user_model_1.User.findById(userId).select("phone");
+        if (!user || !user.phone) {
+            throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "No phone number provided and user phone not found");
+        }
+        phoneToUse = user.phone;
+    }
+    const testResult = yield personalityQuestions_model_1.GuestTestResult
+        .findOne({ phone: phoneToUse })
+        .sort({ createdAt: -1 });
+    const profile = yield profile_model_1.Profile.create(Object.assign(Object.assign({}, payload), { userId, personalityTestPhone: phoneToUse, personalityTestResult: (testResult === null || testResult === void 0 ? void 0 : testResult._id) || undefined }));
+    if (!testResult) {
+        testMessage = `No personality test found for phone: ${phoneToUse}`;
+    }
     const completed = checkProfileCompletion(payload);
     yield user_model_1.User.findByIdAndUpdate(userId, {
         isProfileCompleted: completed
     });
-    return profile;
+    return {
+        profile,
+        testMessage
+    };
 });
 // ─── Update Profile ─────────────────────────
 const updateProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
