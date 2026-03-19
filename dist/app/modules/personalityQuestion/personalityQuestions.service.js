@@ -8,8 +8,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PersonalityService = void 0;
+const http_status_codes_1 = require("http-status-codes");
+const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const personalityQuestions_model_1 = require("./personalityQuestions.model");
 const getQuestions = () => __awaiter(void 0, void 0, void 0, function* () {
     return personalityQuestions_model_1.PersonalityQuestion
@@ -65,9 +70,15 @@ const submitTest = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     return result;
 });
 const getSingleResultFromDB = (id) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield personalityQuestions_model_1.GuestTestResult.findById(id)
-        .select("totalScore percentage range -_id");
-    return result;
+    const result = yield personalityQuestions_model_1.GuestTestResult.findById(id).select("totalScore percentage range phone -_id");
+    if (!result) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Result not found");
+    }
+    if (!result.phone) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Phone number is missing for this result");
+    }
+    const { totalScore, percentage, range } = result;
+    return { totalScore, percentage, range };
 });
 const updateGuestProfileInDB = (id, payload) => __awaiter(void 0, void 0, void 0, function* () {
     const result = yield personalityQuestions_model_1.GuestTestResult.findByIdAndUpdate(id, { $set: payload }, { new: true, runValidators: true }).select("totalScore percentage range -_id");
