@@ -60,7 +60,19 @@ const getDivisions = catchAsync(async (req: Request, res: Response) => {
 // GET /api/geo/divisions/:divisionId/districts
 const getDistrictsByDivision = catchAsync(async (req: Request, res: Response) => {
     const { divisionId } = req.params;
-    const districts = await District.find({ divisionId }).select("-__v -createdAt -updatedAt").sort({ name: 1 });
+
+    const filter: any = { divisionId };
+
+    if (req.query.search) {
+        filter.name = {
+            $regex: req.query.search,
+            $options: "i",
+        };
+    }
+
+    const districts = await District.find(filter)
+        .select("-__v -createdAt -updatedAt")
+        .sort({ name: 1 });
 
     sendResponse(res, {
         statusCode: StatusCodes.OK,
@@ -69,7 +81,6 @@ const getDistrictsByDivision = catchAsync(async (req: Request, res: Response) =>
         data: districts,
     });
 });
-
 // ─── Thanas by District ───────────────────────────────────────────────────────
 // GET /api/geo/districts/:districtId/thanas
 const getThanasByDistrict = catchAsync(async (req: Request, res: Response) => {
