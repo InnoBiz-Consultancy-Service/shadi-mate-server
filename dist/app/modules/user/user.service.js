@@ -201,7 +201,6 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
 const resetPassword = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     const { identifier, oldPassword, newPassword } = payload;
     console.log("🟣 Forget password attempt for identifier:", identifier);
-    // Find user by phone or email
     const user = yield user_model_1.User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
         isDeleted: false,
@@ -216,20 +215,16 @@ const resetPassword = (payload) => __awaiter(void 0, void 0, void 0, function* (
     if (!user.isVerified) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Please verify your account first");
     }
-    // Verify old password
     const isOldPasswordMatch = yield bcryptjs_1.default.compare(oldPassword, user.password);
     console.log("🟣 Old password match result:", isOldPasswordMatch);
     if (!isOldPasswordMatch) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Current password is incorrect");
     }
-    // Hash the new password
     const hashedNewPassword = yield bcryptjs_1.default.hash(newPassword, 12);
     console.log("🟣 New password hashed successfully");
-    // Update password in database
     user.password = hashedNewPassword;
     yield user.save();
     console.log("🟣 Password updated successfully for user:", user.phone);
-    // Generate new token for auto-login (optional)
     const token = jsonwebtoken_1.default.sign({
         id: user._id,
         phone: user.phone,
@@ -240,7 +235,7 @@ const resetPassword = (payload) => __awaiter(void 0, void 0, void 0, function* (
     }, envConfig_1.envVars.JWT_SECRET, { expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN });
     return {
         message: "Password changed successfully. Please login with your new password.",
-        token, // Optional: auto-login after password change
+        token,
         user: {
             _id: user._id,
             name: user.name,
@@ -289,11 +284,10 @@ const updateBlockStatus = (userId, isBlocked, requestUser) => __awaiter(void 0, 
 });
 // ─── Forgot Password (verified users only) ─────────────────────────────
 const forgotPassword = (identifier) => __awaiter(void 0, void 0, void 0, function* () {
-    // Find verified user
     const user = yield user_model_1.User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
         isDeleted: false,
-        isVerified: true, // only verified users
+        isVerified: true,
     });
     if (!user) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "No verified account found with this phone/email");
@@ -311,13 +305,12 @@ const forgotPassword = (identifier) => __awaiter(void 0, void 0, void 0, functio
     }, { upsert: true, new: true });
     return {
         message: "Password reset OTP sent",
-        otp, // dev only
+        otp,
     };
 });
 // ─── Verify Reset OTP (verified users only) ────────────────────────────
 const verifyResetOtp = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     const { identifier, otp, newPassword } = payload;
-    // Only look for verified users
     const user = yield user_model_1.User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
         isDeleted: false,
@@ -342,7 +335,6 @@ const verifyResetOtp = (payload) => __awaiter(void 0, void 0, void 0, function* 
     const hashedPassword = yield bcryptjs_1.default.hash(newPassword, 12);
     user.password = hashedPassword;
     yield user.save();
-    // delete OTP after successful reset
     yield user_model_1.Otp.deleteOne({ _id: otpDoc._id });
     return {
         message: "Password reset successful"

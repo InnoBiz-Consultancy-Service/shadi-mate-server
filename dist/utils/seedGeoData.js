@@ -37,8 +37,6 @@ const seedGeoData = () => __awaiter(void 0, void 0, void 0, function* () {
                 yield geo_model_1.Thana.deleteMany({});
                 console.log("✅ Cleared all existing geo data");
             }
-            // Seed all geo data fresh
-            console.log("🌱 Seeding fresh geo data...");
             for (const divData of geoSeedData_1.geoSeedData) {
                 // Create division - FIXED: Type assertion for _id
                 const division = yield geo_model_1.Division.create({ name: divData.division });
@@ -64,7 +62,6 @@ const seedGeoData = () => __awaiter(void 0, void 0, void 0, function* () {
                 }
                 console.log(`     ├─ Districts: ${districtCount}, Thanas: ${thanaCount}`);
             }
-            console.log("✅ Seeded all divisions, districts, and thanas successfully!");
             // Verify the counts
             const finalDivCount = yield geo_model_1.Division.countDocuments();
             const finalDistCount = yield geo_model_1.District.countDocuments();
@@ -81,7 +78,6 @@ const seedGeoData = () => __awaiter(void 0, void 0, void 0, function* () {
             const thanaCount = yield geo_model_1.Thana.countDocuments();
             console.log(`📊 Current counts - Divisions: ${divCount}, Districts: ${distCount}, Thanas: ${thanaCount}`);
         }
-        console.log("🎉 Database seeding completed!");
     }
     catch (error) {
         console.error("❌ Error seeding geo data:", error);

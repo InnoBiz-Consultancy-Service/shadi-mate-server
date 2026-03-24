@@ -52,7 +52,6 @@ const UserSchema = new Schema<IUser>(
         gender: {
             type: String,
             enum: TGender,
-            required: true,
         },
     },
     { timestamps: true }
