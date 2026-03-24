@@ -72,27 +72,22 @@ const submitTest = async (payload: any) => {
     return result;
 };
 const getSingleResultFromDB = async (id: string) => {
-    const result = await GuestTestResult.findById(id).select(
-        "totalScore percentage type email -_id"
-    );
+    const result = await GuestTestResult.findById(id).select("type message email name gender -_id");
 
     if (!result) {
-        throw new AppError(
-            StatusCodes.NOT_FOUND,
-            "Result not found"
-        );
+        throw new AppError(StatusCodes.NOT_FOUND, "Result not found");
     }
 
-    if (!result.email) {
-        throw new AppError(
-            StatusCodes.BAD_REQUEST,
-            "Email is missing for this result"
-        );
-    }
+    // সব optional return করো
+    const { type, message, email, name, gender } = result;
 
-    const {  type,email } = result;
-
-    return { type,email };
+    return {
+        type,
+        message: message || null,
+        email: email || null,
+        name: name || null,
+        gender: gender || null
+    };
 };
 
 const updateGuestProfileInDB = async (id: string, payload: { name: string; email: string; gender: string }) => {
@@ -100,7 +95,7 @@ const updateGuestProfileInDB = async (id: string, payload: { name: string; email
         id,
         { $set: payload },
         { new: true, runValidators: true }
-    ).select("totalScore percentage range -_id");
+    ).select("type email message -_id");
 
     return result;
 };

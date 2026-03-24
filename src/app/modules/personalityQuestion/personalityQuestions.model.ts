@@ -60,7 +60,8 @@ const guestTestResultSchema = new mongoose.Schema(
         ],
 
     
-        type: String
+        type: String,
+        message: String,
     },
     { timestamps: true }
 );
