@@ -34,8 +34,19 @@ const getUniversities = catchAsync(async (req: Request, res: Response) => {
 });
 // ─── Divisions ────────────────────────────────────────────────────────────────
 // GET /api/geo/divisions
-const getDivisions = catchAsync(async (_req: Request, res: Response) => {
-    const divisions = await Division.find().select("-__v -createdAt -updatedAt").sort({ name: 1 });
+const getDivisions = catchAsync(async (req: Request, res: Response) => {
+    const filter: any = {};
+
+    if (req.query.search) {
+        filter.name = {
+            $regex: req.query.search,
+            $options: "i",
+        };
+    }
+
+    const divisions = await Division.find(filter)
+        .select("-__v -createdAt -updatedAt")
+        .sort({ name: 1 });
 
     sendResponse(res, {
         statusCode: StatusCodes.OK,
@@ -49,7 +60,19 @@ const getDivisions = catchAsync(async (_req: Request, res: Response) => {
 // GET /api/geo/divisions/:divisionId/districts
 const getDistrictsByDivision = catchAsync(async (req: Request, res: Response) => {
     const { divisionId } = req.params;
-    const districts = await District.find({ divisionId }).select("-__v -createdAt -updatedAt").sort({ name: 1 });
+
+    const filter: any = { divisionId };
+
+    if (req.query.search) {
+        filter.name = {
+            $regex: req.query.search,
+            $options: "i",
+        };
+    }
+
+    const districts = await District.find(filter)
+        .select("-__v -createdAt -updatedAt")
+        .sort({ name: 1 });
 
     sendResponse(res, {
         statusCode: StatusCodes.OK,
@@ -58,12 +81,23 @@ const getDistrictsByDivision = catchAsync(async (req: Request, res: Response) =>
         data: districts,
     });
 });
-
 // ─── Thanas by District ───────────────────────────────────────────────────────
 // GET /api/geo/districts/:districtId/thanas
 const getThanasByDistrict = catchAsync(async (req: Request, res: Response) => {
     const { districtId } = req.params;
-    const thanas = await Thana.find({ districtId }).select("-__v -createdAt -updatedAt").sort({ name: 1 });
+
+    const filter: any = { districtId };
+
+    if (req.query.search) {
+        filter.name = {
+            $regex: req.query.search,
+            $options: "i",
+        };
+    }
+
+    const thanas = await Thana.find(filter)
+        .select("-__v -createdAt -updatedAt")
+        .sort({ name: 1 });
 
     sendResponse(res, {
         statusCode: StatusCodes.OK,
