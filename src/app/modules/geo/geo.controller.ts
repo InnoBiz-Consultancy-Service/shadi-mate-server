@@ -34,8 +34,19 @@ const getUniversities = catchAsync(async (req: Request, res: Response) => {
 });
 // ─── Divisions ────────────────────────────────────────────────────────────────
 // GET /api/geo/divisions
-const getDivisions = catchAsync(async (_req: Request, res: Response) => {
-    const divisions = await Division.find().select("-__v -createdAt -updatedAt").sort({ name: 1 });
+const getDivisions = catchAsync(async (req: Request, res: Response) => {
+    const filter: any = {};
+
+    if (req.query.search) {
+        filter.name = {
+            $regex: req.query.search,
+            $options: "i",
+        };
+    }
+
+    const divisions = await Division.find(filter)
+        .select("-__v -createdAt -updatedAt")
+        .sort({ name: 1 });
 
     sendResponse(res, {
         statusCode: StatusCodes.OK,
