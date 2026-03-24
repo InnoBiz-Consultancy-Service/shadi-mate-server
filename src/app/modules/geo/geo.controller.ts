@@ -5,16 +5,25 @@ import { sendResponse } from "../../../utils/sendResponse";
 import { University, Division, District, Thana } from "./geo.model";
 
 // ─── Universities ─────────────────────────────────────────────────────────────
-// GET /api/geo/universities          → all universities
-// GET /api/geo/universities?type=govt  → only govt
-// GET /api/geo/universities?type=private → only private
+
 const getUniversities = catchAsync(async (req: Request, res: Response) => {
-    const filter: Record<string, string> = {};
+    const filter: any = {};
+
+    // type filter
     if (req.query.type === "govt" || req.query.type === "private") {
         filter.type = req.query.type;
     }
 
-    const universities = await University.find(filter).select("-__v -createdAt -updatedAt").sort({ name: 1 });
+    if (req.query.search) {
+        filter.name = {
+            $regex: req.query.search,
+            $options: "i",
+        };
+    }
+
+    const universities = await University.find(filter)
+        .select("-__v -createdAt -updatedAt")
+        .sort({ name: 1 });
 
     sendResponse(res, {
         statusCode: StatusCodes.OK,
@@ -23,7 +32,6 @@ const getUniversities = catchAsync(async (req: Request, res: Response) => {
         data: universities,
     });
 });
-
 // ─── Divisions ────────────────────────────────────────────────────────────────
 // GET /api/geo/divisions
 const getDivisions = catchAsync(async (_req: Request, res: Response) => {
