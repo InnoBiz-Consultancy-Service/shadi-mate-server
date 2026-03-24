@@ -61,9 +61,7 @@ const profileSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: "GuestTestResult",
         },
-        personalityTestEmail: {
-            type: String,
-        },
+       
         personality: {
             type: String,
             enum: Object.values(Personality),
