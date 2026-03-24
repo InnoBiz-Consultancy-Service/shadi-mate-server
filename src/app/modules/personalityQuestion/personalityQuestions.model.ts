@@ -59,9 +59,8 @@ const guestTestResultSchema = new mongoose.Schema(
             }
         ],
 
-        totalScore: Number,
-        percentage: Number,
-        range: String
+    
+        type: String
     },
     { timestamps: true }
 );
