@@ -42,15 +42,12 @@ const educationSchema = new Schema(
       },
       department: {
         type: String,
-        required: true,
       },
       institution: {
         type: String,
-        required: true,
       },
       passingYear: {
         type: String,
-        required: true,
       },
       universityId: {
         type: Schema.Types.ObjectId,
@@ -80,15 +77,14 @@ const religionSchema = new Schema(
     },
     dailyLifeStyleSummary: {
       type: String,
-      required: true,
     },
     religiousLifestyleDetails: {
       type: String,
-      required: true,
     },
   },
   { _id: false }
 );
+
 
 // ─── Main Profile Schema ─────────────────────────
 const profileSchema = new Schema(
@@ -103,8 +99,8 @@ const profileSchema = new Schema(
     // ─── Basic Info ─────────────────────────
     gender: {
       type: String,
-      enum: Object.values(Gender),
       required: true,
+        enum: Object.values(Gender) 
     },
     birthDate: {
       type: Date,
@@ -121,7 +117,10 @@ const profileSchema = new Schema(
     motherOccupation: {
       type: String,
     },
-
+    maritalStatus: {
+      type: String,
+      enum: ["Single", "Divorced", "Widowed"],
+    },
     // ─── Address ─────────────────────────
     address: {
       type: addressSchema,
@@ -137,13 +136,11 @@ const profileSchema = new Schema(
     // ─── Religion ─────────────────────────
     religion: {
       type: religionSchema,
-      required: true,
     },
 
     // ─── Bio ─────────────────────────
     aboutMe: {
       type: String,
-      required: true,
     },
 
     // ─── Physical (optional) ─────────────────────────
@@ -154,26 +151,27 @@ const profileSchema = new Schema(
     // ─── Career ─────────────────────────
     profession: {
       type: String,
-      required: true
+      required: true,
     },
     salaryRange: String,
     economicalStatus: {
       type: String,
       enum: Object.values(EconomicalStatus),
+      required: true,
     },
 
     // ─── Personality ─────────────────────────
     personality: {
       type: String,
-      enum: Object.values(Personality),
       required: true,
+      enum: Object.values(Personality),
     },
 
     // ─── Habits ─────────────────────────
     habits: {
       type: [String],
-      enum: Object.values(Habits),
       required: true,
+      enum: Object.values(Habits),
     },
   },
   {
