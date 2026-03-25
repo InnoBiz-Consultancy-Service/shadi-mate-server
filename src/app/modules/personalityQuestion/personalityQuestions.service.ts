@@ -78,7 +78,6 @@ const getSingleResultFromDB = async (id: string) => {
         throw new AppError(StatusCodes.NOT_FOUND, "Result not found");
     }
 
-    // সব optional return করো
     const { type, message, email, name, gender } = result;
 
     return {

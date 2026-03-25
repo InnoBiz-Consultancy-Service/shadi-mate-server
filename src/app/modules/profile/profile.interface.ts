@@ -13,9 +13,9 @@ export enum GuardianRelation {
     GUARDIAN = "guardian",
 }
 export enum Personality {
-    SOCIAL_HEART = "Social Heart",
-    BALANCED_SOUL = "Balanced Soul",
-    PRIVATE_THINKER = "Private Thinker",
+    CARING_SOUL = "Caring Soul",
+    BALANCED_THINKER = "Balanced Thinker",
+    AMBITIOUS_MIND = "Ambitious Mind",
 }
 export enum EconomicalStatus {
     LOW = "Low",
@@ -34,4 +34,22 @@ export interface QueryParams {
     page?: number;
     limit?: number;
     sort?: string;
+}
+export enum Habits {
+  READING_BOOKS = "Reading Books",
+  TRAVELING = "Traveling",
+  COOKING = "Cooking",
+  SPORTS = "Sports",
+  GYM_FITNESS = "Gym/Fitness",
+  WATCHING_MOVIES = "Watching Movies",
+  LISTENING_TO_MUSIC = "Listening to Music",
+  PHOTOGRAPHY = "Photography",
+  GARDENING = "Gardening",
+  GAMING = "Gaming",
+  WRITING = "Writing",
+  ART_AND_CRAFT = "Art & Craft",
+  SOCIAL_WORK = "Social Work",
+  ENTREPRENEURSHIP = "Entrepreneurship",
+  TECHNOLOGY = "Technology",
+  OTHERS = "others",
 }

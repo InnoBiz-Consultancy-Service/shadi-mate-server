@@ -4,26 +4,26 @@ import { Profile } from "./profile.model";
 import { User } from "../user/user.model";
 import { AggregationBuilder } from "../../../utils/profileQueryBuilder";
 import { QueryParams } from "./profile.interface";
-import { GuestTestResult } from "../personalityQuestion/personalityQuestions.model";
 
-const checkProfileCompletion = (payload: any) => {
+const checkProfileCompletion = (profile: any) => {
+    return !!(
+        profile.gender &&
+       
 
-    if (
-        payload.gender &&
-        payload.guardianContact &&
-        payload.relation &&
-        payload.address?.divisionId &&
-        payload.address?.districtId &&
-        payload.address?.thanaId &&
-        payload.address?.details &&
-        (payload.universityId || payload.collegeName)
-    ) {
-        return true;
-    }
+        profile.address?.divisionId &&
+        profile.address?.districtId &&
+        profile.address?.details &&
 
-    return false;
+    
+
+        profile.religion?.faith &&
+        profile.religion?.practiceLevel &&
+
+        profile.personality &&
+        profile.profession &&
+        profile.habits 
+    );
 };
-
 // ─── Create Profile ─────────────────────────
 
 const createProfile = async (userId: string, payload: any) => {
@@ -31,42 +31,18 @@ const createProfile = async (userId: string, payload: any) => {
         throw new AppError(StatusCodes.BAD_REQUEST, "User ID is required");
     }
 
-    let emailToUse = payload.personalityTestEmail || null;
-    let testResult = null;
-    let testMessage: string | null = null;
-
-    if (!emailToUse) {
-        const user = await User.findById(userId).select("email");
-        emailToUse = user?.email || null;
-    }
-
-    if (emailToUse) {
-        testResult = await GuestTestResult
-            .findOne({ email: emailToUse })
-            .sort({ createdAt: -1 });
-
-        if (!testResult) {
-            testMessage = `No personality test found for email: ${emailToUse}`;
-        }
-    }
-
     const profile = await Profile.create({
         ...payload,
         userId,
-        personalityTestEmail: emailToUse || undefined,
-        personalityTestResult: testResult?._id || undefined,
     });
 
-    const completed = checkProfileCompletion(payload);
+    const completed = checkProfileCompletion(profile);
 
     await User.findByIdAndUpdate(userId, {
         isProfileCompleted: completed
     });
 
-    return {
-        profile,
-        testMessage
-    };
+    return profile;
 };
 
 // ─── Update Profile ─────────────────────────
@@ -93,7 +69,15 @@ const updateProfile = async (userId: string, payload: any) => {
 };
 
 
-const getProfiles = async (query: QueryParams) => {
+const getProfiles = async (query: QueryParams & {
+    minAge?: number;
+    maxAge?: number;
+    educationVariety?: string;
+    faith?: string;
+    practiceLevel?: string;
+    personality?: string;
+    habits?: string[];
+}) => {
     const {
         search,
         university,
@@ -102,6 +86,13 @@ const getProfiles = async (query: QueryParams) => {
         thana,
         gender,
         address,
+        minAge,
+        maxAge,
+        educationVariety,
+        faith,
+        practiceLevel,
+        personality,
+        habits,
         page = 1,
         limit = 10,
         sort = "-createdAt",
@@ -109,7 +100,7 @@ const getProfiles = async (query: QueryParams) => {
 
     const builder = new AggregationBuilder(Profile);
 
-    // Define lookup stages
+    // ─── Lookup Stages ─────────────────────────
     const lookups = [
         {
             $lookup: {
@@ -122,7 +113,7 @@ const getProfiles = async (query: QueryParams) => {
         {
             $lookup: {
                 from: "universities",
-                localField: "universityId",
+                localField: "education.graduation.universityId",
                 foreignField: "_id",
                 as: "university"
             }
@@ -153,24 +144,70 @@ const getProfiles = async (query: QueryParams) => {
         }
     ];
 
-    // Build and execute query
-    const result = await builder
-        .addLookups(lookups)
+    builder.addLookups(lookups);
+
+    // ─── Filters ─────────────────────────
+    builder
         .addRegexMatch("university.name", university as string)
         .addRegexMatch("division.name", division as string)
         .addRegexMatch("district.name", district as string)
         .addRegexMatch("thana.name", thana as string)
-        .addRegexMatch("address.details", address as string)
-        .addMatch("user.gender", gender as string)
-        .addSearch(search, [
+        .addMatch("user.gender", gender as string);
+
+    // ─── Optional filters ─────────────────────────
+    if (educationVariety) {
+        builder.addMatch("education.graduation.variety", educationVariety);
+    }
+
+    if (faith) {
+        builder.addMatch("religion.faith", faith);
+    }
+
+    if (practiceLevel) {
+        builder.addMatch("religion.practiceLevel", practiceLevel);
+    }
+
+    if (personality) {
+        builder.addMatch("personality", personality);
+    }
+
+    if (habits && habits.length > 0) {
+        builder.addMatch("habits", { $in: habits });
+    }
+
+    if (minAge || maxAge) {
+        const now = new Date();
+        const ageFilter: any = {};
+        if (minAge) {
+            ageFilter.$lte = new Date(
+                now.getFullYear() - minAge,
+                now.getMonth(),
+                now.getDate()
+            );
+        }
+        if (maxAge) {
+            ageFilter.$gte = new Date(
+                now.getFullYear() - maxAge,
+                now.getMonth(),
+                now.getDate()
+            );
+        }
+        builder.addMatch("BirthDate", ageFilter);
+    }
+
+    // ─── Search ─────────────────────────
+    if (search) {
+        builder.addSearch(search, [
             "user.name",
-            "guardianContact",
-            "collegeName",
+            "education.graduation.institution",
             "division.name",
             "district.name",
-            "thana.name",
-            "university.name"
-        ])
+            "thana.name"
+        ]);
+    }
+
+    // ─── Sorting + Pagination ─────────────────────────
+    const result = await builder
         .addSort(sort)
         .addPagination(Number(page), Number(limit))
         .build()
