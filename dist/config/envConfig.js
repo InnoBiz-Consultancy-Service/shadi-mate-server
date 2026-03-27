@@ -7,7 +7,7 @@ exports.envVars = void 0;
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const loadEnvVariables = () => {
-    const requiredEnvVariables = ["PORT", "DB_URL", "NODE_ENV", "JWT_SECRET", "JWT_EXPIRES_IN", "SUPER_ADMIN_EMAIL", "SUPER_ADMIN_PASSWORD", "BCRYPT_SALT_ROUND", "FRONTEND_URL"];
+    const requiredEnvVariables = ["PORT", "DB_URL", "NODE_ENV", "JWT_SECRET", "JWT_EXPIRES_IN", "SUPER_ADMIN_EMAIL", "SUPER_ADMIN_PASSWORD", "BCRYPT_SALT_ROUND", "FRONTEND_URL", "REDIS_URL"];
     requiredEnvVariables.forEach(key => {
         if (!process.env[key]) {
             throw new Error(`Missing required environment variable: ${key}`);
@@ -23,7 +23,8 @@ const loadEnvVariables = () => {
         SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL,
         SUPER_ADMIN_PASSWORD: process.env.SUPER_ADMIN_PASSWORD,
         BCRYPT_SALT_ROUND: process.env.BCRYPT_SALT_ROUND,
-        FRONTEND_URL: process.env.FRONEND_URL
+        FRONTEND_URL: process.env.FRONEND_URL,
+        REDIS_URL: process.env.REDIS_URL
     };
 };
 exports.envVars = loadEnvVariables();

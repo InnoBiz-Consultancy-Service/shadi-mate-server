@@ -1,8 +1,8 @@
 // services/dreamPartner.service.ts
 import { StatusCodes } from "http-status-codes";
-import { DreamPartnerPreference } from "../dreamPartner/dreamPartner.model";
-import { Profile } from "../modules/profile/profile.model";
-import AppError from "../../helpers/AppError";
+import { DreamPartnerPreference } from "./dreamPartner.model";
+import { Profile } from "../profile/profile.model";
+import AppError from "../../../helpers/AppError";
 
 const savePreference = async (userId: string, payload: any) => {
     if (!userId) throw new AppError(StatusCodes.BAD_REQUEST, "User ID is required");

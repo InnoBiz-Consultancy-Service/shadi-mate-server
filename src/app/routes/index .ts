@@ -3,7 +3,7 @@ import UserRoutes from "../modules/user/user.router"
 import GeoRoutes from "../modules/geo/geo.router"
 import { ProfileRoutes } from "../modules/profile/profile.route"
 import { PersonalityQuestionRoutes } from "../modules/personalityQuestion/personalityQuestions.route"
-import { DreamPartnerRoutes } from "../dreamPartner/dreamPartner.route"
+import { DreamPartnerRoutes } from "../modules/dreamPartner/dreamPartner.route"
 
 export const router = Router()
 
