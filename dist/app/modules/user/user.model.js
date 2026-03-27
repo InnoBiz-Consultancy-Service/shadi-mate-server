@@ -52,7 +52,6 @@ const UserSchema = new mongoose_1.Schema({
     gender: {
         type: String,
         enum: user_interface_1.TGender,
-        required: true,
     },
 }, { timestamps: true });
 exports.User = (0, mongoose_1.model)("User", UserSchema);

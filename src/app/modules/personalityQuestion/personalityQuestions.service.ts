@@ -72,10 +72,19 @@ const submitTest = async (payload: any) => {
     return result;
 };
 const getSingleResultFromDB = async (id: string) => {
-    const result = await GuestTestResult.findById(id).select("type message email name gender -_id");
-
+    const result = await GuestTestResult.findById(id)
+        .select("type message email name gender -_id");
+console.log(result?.email)
     if (!result) {
         throw new AppError(StatusCodes.NOT_FOUND, "Result not found");
+    }
+
+    // 🔴 Email must exist
+    if (!result.email) {
+        throw new AppError(
+            StatusCodes.BAD_REQUEST,
+            "Email is required to view this result"
+        );
     }
 
     const { type, message, email, name, gender } = result;
@@ -83,12 +92,11 @@ const getSingleResultFromDB = async (id: string) => {
     return {
         type,
         message: message || null,
-        email: email || null,
+        email,
         name: name || null,
         gender: gender || null
     };
 };
-
 const updateGuestProfileInDB = async (id: string, payload: { name: string; email: string; gender: string }) => {
     const result = await GuestTestResult.findByIdAndUpdate(
         id,

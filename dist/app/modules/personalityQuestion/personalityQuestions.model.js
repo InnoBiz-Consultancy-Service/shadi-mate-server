@@ -46,8 +46,7 @@ const guestTestResultSchema = new mongoose_1.default.Schema({
             }
         }
     ],
-    totalScore: Number,
-    percentage: Number,
-    range: String
+    type: String,
+    message: String,
 }, { timestamps: true });
 exports.GuestTestResult = mongoose_1.default.model("GuestTestResult", guestTestResultSchema);
