@@ -4,6 +4,7 @@ import GeoRoutes from "../modules/geo/geo.router"
 import { ProfileRoutes } from "../modules/profile/profile.route"
 import { PersonalityQuestionRoutes } from "../modules/personalityQuestion/personalityQuestions.route"
 import { DreamPartnerRoutes } from "../modules/dreamPartner/dreamPartner.route"
+import { ChatRoutes } from "../modules/chat/chat.route"
 
 export const router = Router()
 
@@ -27,6 +28,10 @@ const moduleRoutes = [
     {
         path: "/dream-partner",
         route: DreamPartnerRoutes
+    },
+    {
+        path: "/chat",
+        route: ChatRoutes
     }
 ]
 
