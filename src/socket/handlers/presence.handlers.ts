@@ -1,23 +1,30 @@
 import { Socket } from "socket.io";
 import { redisClient } from "../../utils/redis";
 import { verifyToken } from "../../utils/socket.auth";
+
 export const presenceHandler = (socket: Socket) => {
-    socket.on("register", async (token: string) => {
-        const decoded = verifyToken(token);
-        if (!decoded) return socket.emit("unauthorized");
+    const token = socket.handshake.query.token as string;
 
-        const userId = decoded.id;
-        socket.data.userId = userId;
+    if (!token) {
+        socket.emit("unauthorized", { message: "No token provided" });
+        socket.disconnect();
+        return;
+    }
 
-        await redisClient.hset("onlineUsers", userId, socket.id);
-        console.log(`🟢 User ${userId} is online`);
-    });
+    const decoded = verifyToken(token);
+
+    if (!decoded) {
+        socket.emit("unauthorized", { message: "Invalid or expired token" });
+        socket.disconnect();
+        return;
+    }
+
+    socket.data.userId = decoded.id;
+    redisClient.hset("onlineUsers", decoded.id, socket.id);
+    console.log(`🟢 User ${decoded.id} is online`);
 
     socket.on("disconnect", async () => {
-        const userId = socket.data.userId;
-        if (userId) {
-            await redisClient.hdel("onlineUsers", userId);
-            console.log(`🔴 User ${userId} offline`);
-        }
+        await redisClient.hdel("onlineUsers", decoded.id);
+        console.log(`🔴 User ${decoded.id} offline`);
     });
 };

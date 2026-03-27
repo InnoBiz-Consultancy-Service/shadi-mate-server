@@ -4,8 +4,8 @@ import { Server as SocketIOServer } from "socket.io";
 import app from "./app";
 import { envVars } from "./config/envConfig";
 import { initSocket } from "./socket";
+import { connectRedis } from "./utils/redis";
 
-// Optional seeders
 import { seedSuperAdmin } from "./utils/seedSuperAdmin";
 import { seedGeoData } from "./utils/seedGeoData";
 import { seedPersonalityQuestions } from "./utils/seedPersonalityQuestions";
@@ -15,9 +15,12 @@ const startServer = async () => {
         await mongoose.connect(envVars.DB_URL);
         console.log("✅ Connected to MongoDB");
 
+        // ✅ Redis আগে connect করো
+        await connectRedis();
+
         const httpServer = http.createServer(app);
         const io = new SocketIOServer(httpServer, {
-            cors: { origin:envVars.FRONTEND_URL, credentials: true },
+            cors: { origin: envVars.FRONTEND_URL, credentials: true },
         });
 
         initSocket(io);
@@ -26,7 +29,6 @@ const startServer = async () => {
             console.log(`🚀 Server running on port ${envVars.PORT}`);
         });
 
-        // Seeders
         seedSuperAdmin();
         seedGeoData();
         seedPersonalityQuestions();
@@ -37,7 +39,6 @@ const startServer = async () => {
     }
 };
 
-// Graceful shutdown
 process.on("SIGTERM", () => process.exit(0));
 process.on("SIGINT", () => process.exit(0));
 process.on("unhandledRejection", (err) => console.error(err));
