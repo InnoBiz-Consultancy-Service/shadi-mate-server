@@ -18,50 +18,29 @@ const http_status_codes_1 = require("http-status-codes");
 const profile_model_1 = require("./profile.model");
 const user_model_1 = require("../user/user.model");
 const profileQueryBuilder_1 = require("../../../utils/profileQueryBuilder");
-const personalityQuestions_model_1 = require("../personalityQuestion/personalityQuestions.model");
-const checkProfileCompletion = (payload) => {
-    var _a, _b, _c, _d;
-    if (payload.gender &&
-        payload.guardianContact &&
-        payload.relation &&
-        ((_a = payload.address) === null || _a === void 0 ? void 0 : _a.divisionId) &&
-        ((_b = payload.address) === null || _b === void 0 ? void 0 : _b.districtId) &&
-        ((_c = payload.address) === null || _c === void 0 ? void 0 : _c.thanaId) &&
-        ((_d = payload.address) === null || _d === void 0 ? void 0 : _d.details) &&
-        (payload.universityId || payload.collegeName)) {
-        return true;
-    }
-    return false;
+const checkProfileCompletion = (profile) => {
+    var _a, _b, _c, _d, _e;
+    return !!(profile.gender &&
+        ((_a = profile.address) === null || _a === void 0 ? void 0 : _a.divisionId) &&
+        ((_b = profile.address) === null || _b === void 0 ? void 0 : _b.districtId) &&
+        ((_c = profile.address) === null || _c === void 0 ? void 0 : _c.details) &&
+        ((_d = profile.religion) === null || _d === void 0 ? void 0 : _d.faith) &&
+        ((_e = profile.religion) === null || _e === void 0 ? void 0 : _e.practiceLevel) &&
+        profile.personality &&
+        profile.profession &&
+        profile.habits);
 };
 // ─── Create Profile ─────────────────────────
 const createProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     if (!userId) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "User ID is required");
     }
-    let emailToUse = payload.personalityTestEmail || null;
-    let testResult = null;
-    let testMessage = null;
-    if (!emailToUse) {
-        const user = yield user_model_1.User.findById(userId).select("email");
-        emailToUse = (user === null || user === void 0 ? void 0 : user.email) || null;
-    }
-    if (emailToUse) {
-        testResult = yield personalityQuestions_model_1.GuestTestResult
-            .findOne({ email: emailToUse })
-            .sort({ createdAt: -1 });
-        if (!testResult) {
-            testMessage = `No personality test found for email: ${emailToUse}`;
-        }
-    }
-    const profile = yield profile_model_1.Profile.create(Object.assign(Object.assign({}, payload), { userId, personalityTestEmail: emailToUse || undefined, personalityTestResult: (testResult === null || testResult === void 0 ? void 0 : testResult._id) || undefined }));
-    const completed = checkProfileCompletion(payload);
+    const profile = yield profile_model_1.Profile.create(Object.assign(Object.assign({}, payload), { userId }));
+    const completed = checkProfileCompletion(profile);
     yield user_model_1.User.findByIdAndUpdate(userId, {
         isProfileCompleted: completed
     });
-    return {
-        profile,
-        testMessage
-    };
+    return profile;
 });
 // ─── Update Profile ─────────────────────────
 const updateProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
@@ -76,9 +55,9 @@ const updateProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
     return profile;
 });
 const getProfiles = (query) => __awaiter(void 0, void 0, void 0, function* () {
-    const { search, university, division, district, thana, gender, address, page = 1, limit = 10, sort = "-createdAt", } = query;
+    const { search, university, division, district, thana, gender, address, minAge, maxAge, educationVariety, faith, practiceLevel, personality, habits, page = 1, limit = 10, sort = "-createdAt", } = query;
     const builder = new profileQueryBuilder_1.AggregationBuilder(profile_model_1.Profile);
-    // Define lookup stages
+    // ─── Lookup Stages ─────────────────────────
     const lookups = [
         {
             $lookup: {
@@ -91,7 +70,7 @@ const getProfiles = (query) => __awaiter(void 0, void 0, void 0, function* () {
         {
             $lookup: {
                 from: "universities",
-                localField: "universityId",
+                localField: "education.graduation.universityId",
                 foreignField: "_id",
                 as: "university"
             }
@@ -121,24 +100,53 @@ const getProfiles = (query) => __awaiter(void 0, void 0, void 0, function* () {
             }
         }
     ];
-    // Build and execute query
-    const result = yield builder
-        .addLookups(lookups)
+    builder.addLookups(lookups);
+    // ─── Filters ─────────────────────────
+    builder
         .addRegexMatch("university.name", university)
         .addRegexMatch("division.name", division)
         .addRegexMatch("district.name", district)
         .addRegexMatch("thana.name", thana)
-        .addRegexMatch("address.details", address)
-        .addMatch("user.gender", gender)
-        .addSearch(search, [
-        "user.name",
-        "guardianContact",
-        "collegeName",
-        "division.name",
-        "district.name",
-        "thana.name",
-        "university.name"
-    ])
+        .addMatch("user.gender", gender);
+    // ─── Optional filters ─────────────────────────
+    if (educationVariety) {
+        builder.addMatch("education.graduation.variety", educationVariety);
+    }
+    if (faith) {
+        builder.addMatch("religion.faith", faith);
+    }
+    if (practiceLevel) {
+        builder.addMatch("religion.practiceLevel", practiceLevel);
+    }
+    if (personality) {
+        builder.addMatch("personality", personality);
+    }
+    if (habits && habits.length > 0) {
+        builder.addMatch("habits", { $in: habits });
+    }
+    if (minAge || maxAge) {
+        const now = new Date();
+        const ageFilter = {};
+        if (minAge) {
+            ageFilter.$lte = new Date(now.getFullYear() - minAge, now.getMonth(), now.getDate());
+        }
+        if (maxAge) {
+            ageFilter.$gte = new Date(now.getFullYear() - maxAge, now.getMonth(), now.getDate());
+        }
+        builder.addMatch("BirthDate", ageFilter);
+    }
+    // ─── Search ─────────────────────────
+    if (search) {
+        builder.addSearch(search, [
+            "user.name",
+            "education.graduation.institution",
+            "division.name",
+            "district.name",
+            "thana.name"
+        ]);
+    }
+    // ─── Sorting + Pagination ─────────────────────────
+    const result = yield builder
         .addSort(sort)
         .addPagination(Number(page), Number(limit))
         .build()

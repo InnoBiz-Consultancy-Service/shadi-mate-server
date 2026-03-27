@@ -20,8 +20,8 @@ const createProfile = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.CREATED,
         success: true,
-        message: result.testMessage || "Profile created successfully",
-        data: result.profile
+        message: "Profile created successfully",
+        data: result
     });
 }));
 const updateProfile = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {

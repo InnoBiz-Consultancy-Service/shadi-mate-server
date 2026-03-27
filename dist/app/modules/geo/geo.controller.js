@@ -15,15 +15,21 @@ const catchAsync_1 = require("../../../utils/catchAsync");
 const sendResponse_1 = require("../../../utils/sendResponse");
 const geo_model_1 = require("./geo.model");
 // ─── Universities ─────────────────────────────────────────────────────────────
-// GET /api/geo/universities          → all universities
-// GET /api/geo/universities?type=govt  → only govt
-// GET /api/geo/universities?type=private → only private
 const getUniversities = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const filter = {};
+    // type filter
     if (req.query.type === "govt" || req.query.type === "private") {
         filter.type = req.query.type;
     }
-    const universities = yield geo_model_1.University.find(filter).select("-__v -createdAt -updatedAt").sort({ name: 1 });
+    if (req.query.search) {
+        filter.name = {
+            $regex: req.query.search,
+            $options: "i",
+        };
+    }
+    const universities = yield geo_model_1.University.find(filter)
+        .select("-__v -createdAt -updatedAt")
+        .sort({ name: 1 });
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.OK,
         success: true,
@@ -33,8 +39,17 @@ const getUniversities = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(voi
 }));
 // ─── Divisions ────────────────────────────────────────────────────────────────
 // GET /api/geo/divisions
-const getDivisions = (0, catchAsync_1.catchAsync)((_req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const divisions = yield geo_model_1.Division.find().select("-__v -createdAt -updatedAt").sort({ name: 1 });
+const getDivisions = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const filter = {};
+    if (req.query.search) {
+        filter.name = {
+            $regex: req.query.search,
+            $options: "i",
+        };
+    }
+    const divisions = yield geo_model_1.Division.find(filter)
+        .select("-__v -createdAt -updatedAt")
+        .sort({ name: 1 });
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.OK,
         success: true,
@@ -46,7 +61,16 @@ const getDivisions = (0, catchAsync_1.catchAsync)((_req, res) => __awaiter(void 
 // GET /api/geo/divisions/:divisionId/districts
 const getDistrictsByDivision = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { divisionId } = req.params;
-    const districts = yield geo_model_1.District.find({ divisionId }).select("-__v -createdAt -updatedAt").sort({ name: 1 });
+    const filter = { divisionId };
+    if (req.query.search) {
+        filter.name = {
+            $regex: req.query.search,
+            $options: "i",
+        };
+    }
+    const districts = yield geo_model_1.District.find(filter)
+        .select("-__v -createdAt -updatedAt")
+        .sort({ name: 1 });
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.OK,
         success: true,
@@ -58,7 +82,16 @@ const getDistrictsByDivision = (0, catchAsync_1.catchAsync)((req, res) => __awai
 // GET /api/geo/districts/:districtId/thanas
 const getThanasByDistrict = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { districtId } = req.params;
-    const thanas = yield geo_model_1.Thana.find({ districtId }).select("-__v -createdAt -updatedAt").sort({ name: 1 });
+    const filter = { districtId };
+    if (req.query.search) {
+        filter.name = {
+            $regex: req.query.search,
+            $options: "i",
+        };
+    }
+    const thanas = yield geo_model_1.Thana.find(filter)
+        .select("-__v -createdAt -updatedAt")
+        .sort({ name: 1 });
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.OK,
         success: true,
