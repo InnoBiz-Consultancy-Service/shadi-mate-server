@@ -1,6 +1,6 @@
 // models/dreamPartner.model.ts
 import { Schema, model } from "mongoose";
-import { EconomicalStatus, Habits } from "../modules/profile/profile.interface";
+import { EconomicalStatus, Habits } from "../profile/profile.interface";
 
 const dreamPartnerPreferenceSchema = new Schema({
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },

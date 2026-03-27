@@ -19,11 +19,9 @@ export const authenticate = (
     const authHeader = authReq.headers.authorization;
 
     if (authHeader) {
-        // যদি Bearer থাকে
         if (authHeader.startsWith("Bearer ")) {
             token = authHeader.split(" ")[1];
         } else {
-            // Bearer না থাকলেও পুরো header কে token ধরা হবে
             token = authHeader;
         }
     }
