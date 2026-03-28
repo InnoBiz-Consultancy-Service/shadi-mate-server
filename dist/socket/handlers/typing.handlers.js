@@ -14,9 +14,20 @@ const redis_1 = require("../../utils/redis");
 const typingHandler = (io, socket) => {
     socket.on("typing", (_a) => __awaiter(void 0, [_a], void 0, function* ({ toUserId }) {
         const senderId = socket.data.userId;
+        if (!senderId || !toUserId)
+            return;
         const receiverSocketId = yield redis_1.redisClient.hget("onlineUsers", toUserId);
         if (receiverSocketId) {
             io.to(receiverSocketId).emit("typing", { fromUserId: senderId });
+        }
+    }));
+    socket.on("stop-typing", (_a) => __awaiter(void 0, [_a], void 0, function* ({ toUserId }) {
+        const senderId = socket.data.userId;
+        if (!senderId || !toUserId)
+            return;
+        const receiverSocketId = yield redis_1.redisClient.hget("onlineUsers", toUserId);
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("stop-typing", { fromUserId: senderId });
         }
     }));
 };

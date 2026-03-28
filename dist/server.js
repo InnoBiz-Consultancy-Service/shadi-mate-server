@@ -18,14 +18,15 @@ const socket_io_1 = require("socket.io");
 const app_1 = __importDefault(require("./app"));
 const envConfig_1 = require("./config/envConfig");
 const socket_1 = require("./socket");
-// Optional seeders
-const seedSuperAdmin_1 = require("./utils/seedSuperAdmin");
-const seedGeoData_1 = require("./utils/seedGeoData");
-const seedPersonalityQuestions_1 = require("./utils/seedPersonalityQuestions");
+const redis_1 = require("./utils/redis");
+const seedSuperAdmin_1 = require("./seeders/seedSuperAdmin");
+const seedGeoData_1 = require("./seeders/seedGeoData");
+const seedPersonalityQuestions_1 = require("./seeders/seedPersonalityQuestions");
 const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield mongoose_1.default.connect(envConfig_1.envVars.DB_URL);
         console.log("✅ Connected to MongoDB");
+        yield (0, redis_1.connectRedis)();
         const httpServer = http_1.default.createServer(app_1.default);
         const io = new socket_io_1.Server(httpServer, {
             cors: { origin: envConfig_1.envVars.FRONTEND_URL, credentials: true },
@@ -34,7 +35,6 @@ const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
         httpServer.listen(envConfig_1.envVars.PORT, () => {
             console.log(`🚀 Server running on port ${envConfig_1.envVars.PORT}`);
         });
-        // Seeders
         (0, seedSuperAdmin_1.seedSuperAdmin)();
         (0, seedGeoData_1.seedGeoData)();
         (0, seedPersonalityQuestions_1.seedPersonalityQuestions)();
@@ -44,7 +44,6 @@ const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
         process.exit(1);
     }
 });
-// Graceful shutdown
 process.on("SIGTERM", () => process.exit(0));
 process.on("SIGINT", () => process.exit(0));
 process.on("unhandledRejection", (err) => console.error(err));

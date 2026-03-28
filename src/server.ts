@@ -6,16 +6,15 @@ import { envVars } from "./config/envConfig";
 import { initSocket } from "./socket";
 import { connectRedis } from "./utils/redis";
 
-import { seedSuperAdmin } from "./utils/seedSuperAdmin";
-import { seedGeoData } from "./utils/seedGeoData";
-import { seedPersonalityQuestions } from "./utils/seedPersonalityQuestions";
+import { seedSuperAdmin } from "./seeders/seedSuperAdmin";
+import { seedGeoData } from "./seeders/seedGeoData";
+import { seedPersonalityQuestions } from "./seeders/seedPersonalityQuestions";
 
 const startServer = async () => {
     try {
         await mongoose.connect(envVars.DB_URL);
         console.log("✅ Connected to MongoDB");
 
-        // ✅ Redis আগে connect করো
         await connectRedis();
 
         const httpServer = http.createServer(app);

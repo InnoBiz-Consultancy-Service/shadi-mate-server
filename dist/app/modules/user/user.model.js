@@ -53,6 +53,11 @@ const UserSchema = new mongoose_1.Schema({
         type: String,
         enum: user_interface_1.TGender,
     },
+    subscription: {
+        type: String,
+        enum: ["free", "premium"],
+        default: "free",
+    },
 }, { timestamps: true });
 exports.User = (0, mongoose_1.model)("User", UserSchema);
 // ─── OTP Schema ─────────────────────────────────────────
