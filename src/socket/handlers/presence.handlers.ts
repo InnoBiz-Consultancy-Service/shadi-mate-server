@@ -20,8 +20,10 @@ export const presenceHandler = (socket: Socket) => {
     }
 
     socket.data.userId = decoded.id;
+    socket.data.subscription = decoded.subscription ?? "free";
+
     redisClient.hset("onlineUsers", decoded.id, socket.id);
-    console.log(`🟢 User ${decoded.id} is online`);
+    console.log(`🟢 User ${decoded.id} is online (subscription: ${socket.data.subscription})`);
 
     socket.on("disconnect", async () => {
         await redisClient.hdel("onlineUsers", decoded.id);

@@ -28,6 +28,7 @@ export const seedSuperAdmin = async () => {
             isVerified: true,
             phone: "01711111111",
             isDeleted: false,
+            subscription: "premium",
         };
 
         const superAdmin = await User.create(payload);
