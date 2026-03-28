@@ -10,16 +10,16 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.seenHandler = void 0;
-const chat_model_1 = require("../../app/modules/chat/chat.model");
 const redis_1 = require("../../utils/redis");
+const chat_model_1 = require("../../app/modules/chat/chat.model");
 const seenHandler = (io, socket) => {
     socket.on("seen", (_a) => __awaiter(void 0, [_a], void 0, function* ({ messageId, senderId }) {
-        yield chat_model_1.Message.findByIdAndUpdate(messageId, {
-            status: "seen",
-        });
-        const senderSocket = yield redis_1.redisClient.hget("onlineUsers", senderId);
-        if (senderSocket) {
-            io.to(senderSocket).emit("message-seen", { messageId });
+        if (!messageId || !senderId)
+            return;
+        yield chat_model_1.Message.findByIdAndUpdate(messageId, { status: "seen" });
+        const senderSocketId = yield redis_1.redisClient.hget("onlineUsers", senderId);
+        if (senderSocketId) {
+            io.to(senderSocketId).emit("message-seen", { messageId });
         }
     }));
 };

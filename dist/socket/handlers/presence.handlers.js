@@ -13,21 +13,26 @@ exports.presenceHandler = void 0;
 const redis_1 = require("../../utils/redis");
 const socket_auth_1 = require("../../utils/socket.auth");
 const presenceHandler = (socket) => {
-    socket.on("register", (token) => __awaiter(void 0, void 0, void 0, function* () {
-        const decoded = (0, socket_auth_1.verifyToken)(token);
-        if (!decoded)
-            return socket.emit("unauthorized");
-        const userId = decoded.id;
-        socket.data.userId = userId;
-        yield redis_1.redisClient.hset("onlineUsers", userId, socket.id);
-        console.log(`🟢 User ${userId} is online`);
-    }));
+    var _a;
+    const token = socket.handshake.query.token;
+    if (!token) {
+        socket.emit("unauthorized", { message: "No token provided" });
+        socket.disconnect();
+        return;
+    }
+    const decoded = (0, socket_auth_1.verifyToken)(token);
+    if (!decoded) {
+        socket.emit("unauthorized", { message: "Invalid or expired token" });
+        socket.disconnect();
+        return;
+    }
+    socket.data.userId = decoded.id;
+    socket.data.subscription = (_a = decoded.subscription) !== null && _a !== void 0 ? _a : "free";
+    redis_1.redisClient.hset("onlineUsers", decoded.id, socket.id);
+    console.log(`🟢 User ${decoded.id} is online (subscription: ${socket.data.subscription})`);
     socket.on("disconnect", () => __awaiter(void 0, void 0, void 0, function* () {
-        const userId = socket.data.userId;
-        if (userId) {
-            yield redis_1.redisClient.hdel("onlineUsers", userId);
-            console.log(`🔴 User ${userId} offline`);
-        }
+        yield redis_1.redisClient.hdel("onlineUsers", decoded.id);
+        console.log(`🔴 User ${decoded.id} offline`);
     }));
 };
 exports.presenceHandler = presenceHandler;

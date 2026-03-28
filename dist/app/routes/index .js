@@ -10,6 +10,8 @@ const geo_router_1 = __importDefault(require("../modules/geo/geo.router"));
 const profile_route_1 = require("../modules/profile/profile.route");
 const personalityQuestions_route_1 = require("../modules/personalityQuestion/personalityQuestions.route");
 const dreamPartner_route_1 = require("../modules/dreamPartner/dreamPartner.route");
+const chat_route_1 = require("../modules/chat/chat.route");
+const like_route_1 = __importDefault(require("../modules/like/like.route"));
 exports.router = (0, express_1.Router)();
 const moduleRoutes = [
     {
@@ -31,6 +33,14 @@ const moduleRoutes = [
     {
         path: "/dream-partner",
         route: dreamPartner_route_1.DreamPartnerRoutes
+    },
+    {
+        path: "/chat",
+        route: chat_route_1.ChatRoutes
+    },
+    {
+        path: "/likes",
+        route: like_route_1.default
     }
 ];
 moduleRoutes.forEach((route) => {
