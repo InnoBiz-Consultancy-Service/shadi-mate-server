@@ -21,6 +21,7 @@ export interface IUser extends Document {
     gender: TGender;
     role: TUserRole;
     isVerified: boolean;
+    subscription: "free" | "premium";
     isProfileCompleted?: boolean;
     createdAt: Date;
     updatedAt: Date;

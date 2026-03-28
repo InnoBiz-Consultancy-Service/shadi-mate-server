@@ -53,6 +53,11 @@ const UserSchema = new Schema<IUser>(
             type: String,
             enum: TGender,
         },
+        subscription: {
+            type: String,
+            enum: ["free", "premium"],
+            default: "free",
+        },
     },
     { timestamps: true }
 );

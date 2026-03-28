@@ -5,9 +5,18 @@ import { Message } from "../../app/modules/chat/chat.model";
 export const chatHandler = (io: any, socket: Socket) => {
     socket.on("send-message", async (data) => {
         const senderId = socket.data.userId;
+        const subscription = socket.data.subscription;
 
         if (!senderId) {
             socket.emit("error", { message: "Unauthorized" });
+            return;
+        }
+
+        if (subscription !== "premium") {
+            socket.emit("error", {
+                message: "Upgrade to premium to send messages",
+                code: "SUBSCRIPTION_REQUIRED",
+            });
             return;
         }
 

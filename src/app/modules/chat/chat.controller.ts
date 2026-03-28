@@ -6,8 +6,17 @@ import { sendResponse } from "../../../utils/sendResponse";
 
 // ─── GET /api/v1/chat/:userId ─────────────────────────────────────────────────
 export const getChatHistory = catchAsync(async (req: Request, res: Response) => {
-    const myId = new Types.ObjectId((req as any).user.id);
+    const user = (req as any).user;
+    const myId = new Types.ObjectId(user.id);
     const otherUserId = new Types.ObjectId(req.params.userId);
+
+    if (user.subscription !== "premium") {
+        return sendResponse(res, {
+            statusCode: 403,
+            success: false,
+            message: "Upgrade to premium to view chat history",
+        });
+    }
 
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
@@ -45,7 +54,9 @@ export const getChatHistory = catchAsync(async (req: Request, res: Response) => 
 
 // ─── GET /api/v1/chat/conversations ──────────────────────────────────────────
 export const getConversationList = catchAsync(async (req: Request, res: Response) => {
-    const myId = new Types.ObjectId((req as any).user.id);
+    const user = (req as any).user;
+    const myId = new Types.ObjectId(user.id);
+    const isPremium = user.subscription === "premium";
 
     const conversations = await Message.aggregate([
         {
@@ -109,10 +120,22 @@ export const getConversationList = catchAsync(async (req: Request, res: Response
         { $sort: { lastMessageTime: -1 } },
     ]);
 
+    const result = conversations.map((conv) => {
+        if (!isPremium) {
+            return {
+                ...conv,
+                lastMessage: null,
+                lastMessageType: null,
+                isLocked: true,
+            };
+        }
+        return { ...conv, isLocked: false };
+    });
+
     sendResponse(res, {
         statusCode: 200,
         success: true,
         message: "Conversations fetched successfully",
-        data: conversations,
+        data: result,
     });
 });

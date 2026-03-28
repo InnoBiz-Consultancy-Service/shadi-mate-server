@@ -17,9 +17,6 @@ const OTP_EXPIRY_MINUTES = 5;
 const registerUser = async (payload: TRegisterInput) => {
     const { name, email, phone, password, gender } = payload;
 
-    console.log("🔵 Registration attempt for phone:", phone);
-    console.log("🔵 Original password:", password);
-
     const [existingUser, existingOtp] = await Promise.all([
         User.findOne({ phone }, "_id").lean(),
         Otp.findOne({ phone }, "_id").lean(),
@@ -36,10 +33,7 @@ const registerUser = async (payload: TRegisterInput) => {
         );
     }
 
-    // Save hashed password in OTP temporarily
     const hashedPassword = await bcrypt.hash(password, 12);
-    console.log("🔵 Hashed password:", hashedPassword);
-
     const otp = generateOtp();
     const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
@@ -53,14 +47,14 @@ const registerUser = async (payload: TRegisterInput) => {
             email,
             phone,
             password: hashedPassword,
-            gender
+            gender,
         },
     });
 
     return {
         message: "OTP sent successfully. Please verify your phone number.",
         phone,
-        otp, // 🔴 DEVELOPMENT ONLY, remove in production
+        otp, // 🔴 DEVELOPMENT ONLY — remove in production
     };
 };
 
@@ -68,13 +62,7 @@ const registerUser = async (payload: TRegisterInput) => {
 const verifyOtp = async (payload: TVerifyOtpInput) => {
     const { phone, otp } = payload;
 
-    console.log("🟢 Verifying OTP for phone:", phone);
-
-    // OTP খুঁজে বের করা
-    const otpDoc = await Otp.findOne({
-        phone,
-        purpose: "registration",
-    });
+    const otpDoc = await Otp.findOne({ phone, purpose: "registration" });
 
     if (!otpDoc) {
         throw new AppError(
@@ -83,29 +71,22 @@ const verifyOtp = async (payload: TVerifyOtpInput) => {
         );
     }
 
-    // OTP expire check
     if (otpDoc.expiresAt < new Date()) {
-        throw new AppError(
-            StatusCodes.GONE,
-            "OTP expired. Please register again"
-        );
+        throw new AppError(StatusCodes.GONE, "OTP expired. Please register again");
     }
 
-    // OTP match check
     if (otpDoc.otp !== otp) {
         throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid OTP");
     }
 
-    // userData থেকে user create
     const user = await User.create({
         ...otpDoc.userData,
         isVerified: true,
     });
 
-    // OTP delete
     await Otp.deleteOne({ _id: otpDoc._id });
 
-    // JWT token generate
+    // ✅ subscription সহ token
     const token = jwt.sign(
         {
             id: user._id,
@@ -114,6 +95,7 @@ const verifyOtp = async (payload: TVerifyOtpInput) => {
             role: user.role,
             isVerified: user.isVerified,
             isProfileCompleted: user.isProfileCompleted,
+            subscription: user.subscription, // ✅ added
         },
         envVars.JWT_SECRET as string,
         {
@@ -133,6 +115,7 @@ const verifyOtp = async (payload: TVerifyOtpInput) => {
             role: user.role,
             isVerified: user.isVerified,
             isProfileCompleted: user.isProfileCompleted,
+            subscription: user.subscription,
         },
     };
 };
@@ -165,10 +148,6 @@ const resendOtp = async (phone: string) => {
 const loginUser = async (payload: TLoginInput) => {
     const { identifier, password } = payload;
 
-    console.log("🟡 Login attempt:", identifier);
-
-    // ───── 1️⃣ Check verified users ─────
-
     const user = await User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
         isDeleted: false,
@@ -189,6 +168,7 @@ const loginUser = async (payload: TLoginInput) => {
             throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid credentials");
         }
 
+        // ✅ subscription সহ token
         const token = jwt.sign(
             {
                 id: user._id,
@@ -197,6 +177,7 @@ const loginUser = async (payload: TLoginInput) => {
                 role: user.role,
                 isProfileCompleted: user.isProfileCompleted,
                 isVerified: user.isVerified,
+                subscription: user.subscription, // ✅ already here, keeping it
             },
             envVars.JWT_SECRET as string,
             {
@@ -204,15 +185,10 @@ const loginUser = async (payload: TLoginInput) => {
             }
         );
 
-        return {
-            message: "Login successful",
-            token,
-            user,
-        };
+        return { message: "Login successful", token, user };
     }
 
-    // ───── 2️⃣ Check OTP pending users ─────
-
+    // ─── Pending OTP user login ─────────────────────────────────────────────────
     const otpDoc = await Otp.findOne({
         $or: [{ phone: identifier }, { "userData.email": identifier }],
         purpose: "registration",
@@ -239,6 +215,7 @@ const loginUser = async (payload: TLoginInput) => {
             role: "user",
             gender: otpDoc.userData.gender,
             isVerified: false,
+            subscription: "free", // pending user সবসময় free
             pendingRegistration: true,
         },
         envVars.JWT_SECRET as string,
@@ -256,15 +233,14 @@ const loginUser = async (payload: TLoginInput) => {
             phone: otpDoc.userData.phone,
             gender: otpDoc.userData.gender,
             isVerified: false,
+            subscription: "free",
         },
     };
 };
 
-// ─── Forget Password (New Function) ───────────────────────────────────────────
+// ─── Reset Password ───────────────────────────────────────────────────────────
 const resetPassword = async (payload: TResetPasswordInput) => {
     const { identifier, oldPassword, newPassword } = payload;
-
-    console.log("🟣 Forget password attempt for identifier:", identifier);
 
     const user = await User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
@@ -272,7 +248,6 @@ const resetPassword = async (payload: TResetPasswordInput) => {
     }).select("+password");
 
     if (!user) {
-        console.log("🟣 User not found");
         throw new AppError(StatusCodes.NOT_FOUND, "Account not found with this phone/email");
     }
 
@@ -285,20 +260,16 @@ const resetPassword = async (payload: TResetPasswordInput) => {
     }
 
     const isOldPasswordMatch = await bcrypt.compare(oldPassword, user.password);
-    console.log("🟣 Old password match result:", isOldPasswordMatch);
 
     if (!isOldPasswordMatch) {
         throw new AppError(StatusCodes.UNAUTHORIZED, "Current password is incorrect");
     }
 
     const hashedNewPassword = await bcrypt.hash(newPassword, 12);
-    console.log("🟣 New password hashed successfully");
-
     user.password = hashedNewPassword;
     await user.save();
 
-    console.log("🟣 Password updated successfully for user:", user.phone);
-
+    // ✅ subscription সহ token
     const token = jwt.sign(
         {
             id: user._id,
@@ -307,14 +278,15 @@ const resetPassword = async (payload: TResetPasswordInput) => {
             role: user.role,
             isProfileCompleted: user.isProfileCompleted,
             isVerified: user.isVerified,
+            subscription: user.subscription, // ✅ added
         },
         envVars.JWT_SECRET,
-        { expiresIn: envVars.JWT_EXPIRES_IN as `${number}${'s' | 'm' | 'h' | 'd'}` }
+        { expiresIn: envVars.JWT_EXPIRES_IN as `${number}${"s" | "m" | "h" | "d"}` }
     );
 
     return {
         message: "Password changed successfully. Please login with your new password.",
-        token, 
+        token,
         user: {
             _id: user._id,
             name: user.name,
@@ -382,12 +354,13 @@ const updateBlockStatus = async (userId: string, isBlocked: boolean, requestUser
     }
     return user;
 };
-// ─── Forgot Password (verified users only) ─────────────────────────────
+
+// ─── Forgot Password ──────────────────────────────────────────────────────────
 const forgotPassword = async (identifier: string) => {
     const user = await User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
         isDeleted: false,
-        isVerified: true, 
+        isVerified: true,
     });
 
     if (!user) {
@@ -403,22 +376,14 @@ const forgotPassword = async (identifier: string) => {
 
     await Otp.findOneAndUpdate(
         { phone: user.phone, purpose: "forgot-password" },
-        {
-            phone: user.phone,
-            otp,
-            expiresAt,
-            purpose: "forgot-password"
-        },
+        { phone: user.phone, otp, expiresAt, purpose: "forgot-password" },
         { upsert: true, new: true }
     );
 
-    return {
-        message: "Password reset OTP sent",
-        otp,
-    };
+    return { message: "Password reset OTP sent", otp };
 };
 
-// ─── Verify Reset OTP (verified users only) ────────────────────────────
+// ─── Verify Reset OTP ────────────────────────────────────────────────────────
 const verifyResetOtp = async (payload: {
     identifier: string;
     otp: string;
@@ -429,17 +394,14 @@ const verifyResetOtp = async (payload: {
     const user = await User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
         isDeleted: false,
-        isVerified: true
+        isVerified: true,
     }).select("+password");
 
     if (!user) {
         throw new AppError(StatusCodes.NOT_FOUND, "No verified account found");
     }
 
-    const otpDoc = await Otp.findOne({
-        phone: user.phone,
-        purpose: "forgot-password"
-    });
+    const otpDoc = await Otp.findOne({ phone: user.phone, purpose: "forgot-password" });
 
     if (!otpDoc) {
         throw new AppError(StatusCodes.NOT_FOUND, "No reset request found");
@@ -459,10 +421,9 @@ const verifyResetOtp = async (payload: {
 
     await Otp.deleteOne({ _id: otpDoc._id });
 
-    return {
-        message: "Password reset successful"
-    };
+    return { message: "Password reset successful" };
 };
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 export const UserService = {
     registerUser,
