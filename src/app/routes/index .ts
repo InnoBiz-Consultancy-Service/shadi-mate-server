@@ -6,6 +6,7 @@ import { PersonalityQuestionRoutes } from "../modules/personalityQuestion/person
 import { DreamPartnerRoutes } from "../modules/dreamPartner/dreamPartner.route"
 import { ChatRoutes } from "../modules/chat/chat.route"
 import LikeRoutes from "../modules/like/like.route"
+import NotificationRoutes from "../modules/notification/notification.route"
 
 export const router = Router()
 
@@ -33,6 +34,11 @@ const moduleRoutes = [
     {
         path: "/chat",
         route: ChatRoutes
+    },
+
+    {
+        path: "/notifications",
+        route: NotificationRoutes
     },
     {
         path: "/likes",
