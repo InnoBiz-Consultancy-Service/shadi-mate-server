@@ -21,12 +21,12 @@ export const seedSuperAdmin = async () => {
         );
 
         const payload: Partial<IUser> = {
-            name: "Shadi Mate",
+            name: "Mohammad Salim",
             role: TUserRole.ADMIN,
             email: envVars.SUPER_ADMIN_EMAIL,
             password: hashedPassword, // ✅ FIXED
             isVerified: true,
-            phone: "01711111111",
+            phone: "01581891023",
             isDeleted: false,
             subscription: "premium",
         };
