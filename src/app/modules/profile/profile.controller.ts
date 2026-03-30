@@ -51,7 +51,7 @@ const getProfiles = catchAsync(async (req: Request, res: Response) => {
 });
 // ─── Get My Profile ─────────────────────────
 const getMyProfile = catchAsync(async (req: Request, res: Response) => {
-    const userId = req.user!.id; 
+    const userId = req.user!.id;
     const profile = await ProfileService.getMyProfile(userId);
 
     sendResponse(res, {
@@ -64,16 +64,19 @@ const getMyProfile = catchAsync(async (req: Request, res: Response) => {
 
 // ─── Get Profile by ID ─────────────────────────
 const getProfileById = catchAsync(async (req: Request, res: Response) => {
-    const profileId = req.params.id; 
-    const profile = await ProfileService.getProfileById(profileId);
+    const profileId = req.params.id;
+    const requestUserId = (req as any).user?.id;
+
+    const profile = await ProfileService.getProfileById(profileId, requestUserId);
 
     sendResponse(res, {
         statusCode: StatusCodes.OK,
         success: true,
         message: "Profile retrieved successfully",
-        data: profile
+        data: profile,
     });
 });
+
 export const ProfileController = {
     createProfile,
     updateProfile,
