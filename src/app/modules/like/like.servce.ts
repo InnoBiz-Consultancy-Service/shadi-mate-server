@@ -4,6 +4,9 @@ import { redisClient } from "../../../utils/redis";
 import { Like } from "./like.model";
 import { User } from "../user/user.model";
 import { Profile } from "../profile/profile.model";
+import { NotificationService } from "../notification/notification.service";
+import { getIO } from "../../../socket/handlers/socketSingleton";
+
 
 // ─── Cache Keys ──────────────────────────────────────────────────────────────
 const LIKE_COUNT_KEY = (userId: string) => `like:count:${userId}`;
@@ -17,11 +20,11 @@ const PROFILE_CACHE_TTL = 60 * 10;
 const PROFILE_SELECT_FIELDS =
     "userId gender birthDate profession economicalStatus personality religion address education aboutMe height skinTone";
 
+// ─── Helper: Batch profile fetch ─────────────────────────────────────────────
 const batchGetProfiles = async (userIds: string[]) => {
     if (!userIds.length) return {};
 
     const profileMap: Record<string, any> = {};
-
     const cacheKeys = userIds.map(PROFILE_CACHE_KEY);
     let cachedValues: (string | null)[] = [];
 
@@ -59,11 +62,7 @@ const batchGetProfiles = async (userIds: string[]) => {
         for (const profile of profiles) {
             const uid = (profile.userId as any)._id.toString();
             profileMap[uid] = profile;
-            pipeline.setex(
-                PROFILE_CACHE_KEY(uid),
-                PROFILE_CACHE_TTL,
-                JSON.stringify(profile)
-            );
+            pipeline.setex(PROFILE_CACHE_KEY(uid), PROFILE_CACHE_TTL, JSON.stringify(profile));
         }
 
         try {
@@ -74,12 +73,14 @@ const batchGetProfiles = async (userIds: string[]) => {
     return profileMap;
 };
 
+// ─── Profile Cache Invalidate ─────────────────────────────────────────────────
 export const invalidateProfileCache = async (userId: string) => {
     try {
         await redisClient.del(PROFILE_CACHE_KEY(userId));
     } catch (_) { }
 };
 
+// ─── Toggle Like / Unlike ─────────────────────────────────────────────────────
 const toggleLike = async (fromUserId: string, toUserId: string) => {
     if (fromUserId === toUserId) {
         throw new AppError(StatusCodes.BAD_REQUEST, "You cannot like your own profile");
@@ -100,13 +101,37 @@ const toggleLike = async (fromUserId: string, toUserId: string) => {
     let action: "liked" | "unliked";
 
     if (existingLike) {
+        // ─── Unlike ───────────────────────────────────────────────────────────
         await Like.deleteOne({ _id: existingLike._id });
         action = "unliked";
     } else {
+        // ─── Like ─────────────────────────────────────────────────────────────
         await Like.create({ fromUserId, toUserId });
         action = "liked";
+
+
+        try {
+            const sender = await User.findById(fromUserId).select("name").lean();
+            const senderName = sender?.name ?? "Someone";
+
+            await NotificationService.createAndDeliver({
+                io: getIO(),
+                redisClient,
+                recipientId: toUserId,
+                senderId: fromUserId,
+                senderName,
+                type: "like",
+                metadata: {
+                    conversationWith: fromUserId,
+                },
+            });
+        } catch (err) {
+            // Notification fail হলেও like action block হবে না
+            console.error("❌ Like notification error:", err);
+        }
     }
 
+    // ─── Cache invalidate ─────────────────────────────────────────────────────
     await Promise.all([
         redisClient.del(LIKE_COUNT_KEY(toUserId)),
         redisClient.del(LIKE_SENDERS_KEY(toUserId)),
@@ -116,6 +141,7 @@ const toggleLike = async (fromUserId: string, toUserId: string) => {
     return { action };
 };
 
+// ─── Get Like Count ───────────────────────────────────────────────────────────
 const getLikeCount = async (targetUserId: string) => {
     const cacheKey = LIKE_COUNT_KEY(targetUserId);
 
@@ -133,6 +159,7 @@ const getLikeCount = async (targetUserId: string) => {
     return { count };
 };
 
+// ─── Get Who Liked Me (Premium Only) ─────────────────────────────────────────
 const getWhoLikedMe = async (userId: string, subscription: string) => {
     if (subscription !== "premium") {
         throw new AppError(
@@ -153,7 +180,6 @@ const getWhoLikedMe = async (userId: string, subscription: string) => {
         .lean();
 
     const senderIds = likes.map((l: any) => l.fromUserId.toString());
-
     const profileMap = await batchGetProfiles(senderIds);
 
     const result = likes.map((like: any) => ({
@@ -169,6 +195,7 @@ const getWhoLikedMe = async (userId: string, subscription: string) => {
     return result;
 };
 
+// ─── Get My Given Likes ───────────────────────────────────────────────────────
 const getMyLikes = async (userId: string) => {
     const cacheKey = MY_LIKES_KEY(userId);
 
@@ -182,7 +209,6 @@ const getMyLikes = async (userId: string) => {
         .lean();
 
     const targetIds = likes.map((l: any) => l.toUserId.toString());
-
     const profileMap = await batchGetProfiles(targetIds);
 
     const result = likes.map((like: any) => ({
