@@ -19,6 +19,8 @@ const redis_1 = require("../../../utils/redis");
 const like_model_1 = require("./like.model");
 const user_model_1 = require("../user/user.model");
 const profile_model_1 = require("../profile/profile.model");
+const notification_service_1 = require("../notification/notification.service");
+const socketSingleton_1 = require("../../../socket/handlers/socketSingleton");
 // ─── Cache Keys ──────────────────────────────────────────────────────────────
 const LIKE_COUNT_KEY = (userId) => `like:count:${userId}`;
 const LIKE_SENDERS_KEY = (userId) => `like:senders:${userId}`;
@@ -27,6 +29,7 @@ const PROFILE_CACHE_KEY = (userId) => `profile:${userId}`;
 const LIKE_LIST_TTL = 60 * 5;
 const PROFILE_CACHE_TTL = 60 * 10;
 const PROFILE_SELECT_FIELDS = "userId gender birthDate profession economicalStatus personality religion address education aboutMe height skinTone";
+// ─── Helper: Batch profile fetch ─────────────────────────────────────────────
 const batchGetProfiles = (userIds) => __awaiter(void 0, void 0, void 0, function* () {
     if (!userIds.length)
         return {};
@@ -74,6 +77,7 @@ const batchGetProfiles = (userIds) => __awaiter(void 0, void 0, void 0, function
     }
     return profileMap;
 });
+// ─── Profile Cache Invalidate ─────────────────────────────────────────────────
 const invalidateProfileCache = (userId) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield redis_1.redisClient.del(PROFILE_CACHE_KEY(userId));
@@ -81,7 +85,9 @@ const invalidateProfileCache = (userId) => __awaiter(void 0, void 0, void 0, fun
     catch (_) { }
 });
 exports.invalidateProfileCache = invalidateProfileCache;
+// ─── Toggle Like / Unlike ─────────────────────────────────────────────────────
 const toggleLike = (fromUserId, toUserId) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     if (fromUserId === toUserId) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "You cannot like your own profile");
     }
@@ -96,13 +102,35 @@ const toggleLike = (fromUserId, toUserId) => __awaiter(void 0, void 0, void 0, f
     const existingLike = yield like_model_1.Like.findOne({ fromUserId, toUserId });
     let action;
     if (existingLike) {
+        // ─── Unlike ───────────────────────────────────────────────────────────
         yield like_model_1.Like.deleteOne({ _id: existingLike._id });
         action = "unliked";
     }
     else {
+        // ─── Like ─────────────────────────────────────────────────────────────
         yield like_model_1.Like.create({ fromUserId, toUserId });
         action = "liked";
+        try {
+            const sender = yield user_model_1.User.findById(fromUserId).select("name").lean();
+            const senderName = (_a = sender === null || sender === void 0 ? void 0 : sender.name) !== null && _a !== void 0 ? _a : "Someone";
+            yield notification_service_1.NotificationService.createAndDeliver({
+                io: (0, socketSingleton_1.getIO)(),
+                redisClient: redis_1.redisClient,
+                recipientId: toUserId,
+                senderId: fromUserId,
+                senderName,
+                type: "like",
+                metadata: {
+                    conversationWith: fromUserId,
+                },
+            });
+        }
+        catch (err) {
+            // Notification fail হলেও like action block হবে না
+            console.error("❌ Like notification error:", err);
+        }
     }
+    // ─── Cache invalidate ─────────────────────────────────────────────────────
     yield Promise.all([
         redis_1.redisClient.del(LIKE_COUNT_KEY(toUserId)),
         redis_1.redisClient.del(LIKE_SENDERS_KEY(toUserId)),
@@ -110,6 +138,7 @@ const toggleLike = (fromUserId, toUserId) => __awaiter(void 0, void 0, void 0, f
     ]);
     return { action };
 });
+// ─── Get Like Count ───────────────────────────────────────────────────────────
 const getLikeCount = (targetUserId) => __awaiter(void 0, void 0, void 0, function* () {
     const cacheKey = LIKE_COUNT_KEY(targetUserId);
     try {
@@ -125,6 +154,7 @@ const getLikeCount = (targetUserId) => __awaiter(void 0, void 0, void 0, functio
     catch (_) { }
     return { count };
 });
+// ─── Get Who Liked Me (Premium Only) ─────────────────────────────────────────
 const getWhoLikedMe = (userId, subscription) => __awaiter(void 0, void 0, void 0, function* () {
     if (subscription !== "premium") {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Upgrade to premium to see who liked your profile");
@@ -155,6 +185,7 @@ const getWhoLikedMe = (userId, subscription) => __awaiter(void 0, void 0, void 0
     catch (_) { }
     return result;
 });
+// ─── Get My Given Likes ───────────────────────────────────────────────────────
 const getMyLikes = (userId) => __awaiter(void 0, void 0, void 0, function* () {
     const cacheKey = MY_LIKES_KEY(userId);
     try {
