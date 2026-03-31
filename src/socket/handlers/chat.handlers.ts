@@ -3,6 +3,7 @@ import { redisClient } from "../../utils/redis";
 import { Message } from "../../app/modules/chat/chat.model";
 import { User } from "../../app/modules/user/user.model";
 import { NotificationService } from "../../app/modules/notification/notification.service";
+import { IgnoreService } from "../../app/modules/ignore/ignore.service";
 import { getIO } from "./socketSingleton";
 
 export const chatHandler = (socket: Socket) => {
@@ -15,7 +16,6 @@ export const chatHandler = (socket: Socket) => {
             return;
         }
 
-        // 🔒 Free user send করতে পারবে না
         if (subscription !== "premium") {
             socket.emit("error", {
                 message: "Upgrade to premium to send messages",
@@ -31,7 +31,30 @@ export const chatHandler = (socket: Socket) => {
             return;
         }
 
-        // ─── Message save ─────────────────────────────────────────────────────
+        const isIgnored = await IgnoreService.isIgnoredBy(senderId, receiverId);
+
+        if (isIgnored) {
+            await IgnoreService.saveIgnoredMessage({
+                senderId,
+                receiverId,
+                content: message,
+                type,
+            });
+
+            socket.emit("message-sent", {
+                _id: null,
+                senderId,
+                receiverId,
+                message,
+                type,
+                status: "sent",
+                createdAt: new Date(),
+            });
+
+            return;
+        }
+
+        // ─── Normal Message save ──────────────────────────────────────────────
         const savedMessage = await Message.create({
             senderId,
             receiverId,
@@ -59,7 +82,7 @@ export const chatHandler = (socket: Socket) => {
             });
         }
 
-        // ─── Message notification ─────────────────────────────────────────────
+        // ─── Notification ─────────────────────────────────────────────────────
         try {
             const sender = await User.findById(senderId).select("name").lean();
             const senderName = sender?.name ?? "Someone";

@@ -7,6 +7,7 @@ import { DreamPartnerRoutes } from "../modules/dreamPartner/dreamPartner.route"
 import { ChatRoutes } from "../modules/chat/chat.route"
 import LikeRoutes from "../modules/like/like.route"
 import NotificationRoutes from "../modules/notification/notification.route"
+import IgnoreRoutes from "../modules/ignore/ignore.route"
 
 export const router = Router()
 
@@ -43,6 +44,10 @@ const moduleRoutes = [
     {
         path: "/likes",
         route: LikeRoutes
+    },
+    {
+        path: "/ignore",
+        route: IgnoreRoutes
     }
 ]
 

@@ -269,7 +269,6 @@ const resetPassword = async (payload: TResetPasswordInput) => {
     user.password = hashedNewPassword;
     await user.save();
 
-    // ✅ subscription সহ token
     const token = jwt.sign(
         {
             id: user._id,

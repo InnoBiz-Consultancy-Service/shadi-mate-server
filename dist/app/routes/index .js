@@ -12,6 +12,7 @@ const personalityQuestions_route_1 = require("../modules/personalityQuestion/per
 const dreamPartner_route_1 = require("../modules/dreamPartner/dreamPartner.route");
 const chat_route_1 = require("../modules/chat/chat.route");
 const like_route_1 = __importDefault(require("../modules/like/like.route"));
+const notification_route_1 = __importDefault(require("../modules/notification/notification.route"));
 exports.router = (0, express_1.Router)();
 const moduleRoutes = [
     {
@@ -37,6 +38,10 @@ const moduleRoutes = [
     {
         path: "/chat",
         route: chat_route_1.ChatRoutes
+    },
+    {
+        path: "/notifications",
+        route: notification_route_1.default
     },
     {
         path: "/likes",

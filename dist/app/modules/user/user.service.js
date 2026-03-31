@@ -207,7 +207,6 @@ const resetPassword = (payload) => __awaiter(void 0, void 0, void 0, function* (
     const hashedNewPassword = yield bcryptjs_1.default.hash(newPassword, 12);
     user.password = hashedNewPassword;
     yield user.save();
-    // ✅ subscription সহ token
     const token = jsonwebtoken_1.default.sign({
         id: user._id,
         phone: user.phone,

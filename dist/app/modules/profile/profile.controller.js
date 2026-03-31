@@ -57,13 +57,15 @@ const getMyProfile = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0
 }));
 // ─── Get Profile by ID ─────────────────────────
 const getProfileById = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     const profileId = req.params.id;
-    const profile = yield profile_service_1.ProfileService.getProfileById(profileId);
+    const requestUserId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+    const profile = yield profile_service_1.ProfileService.getProfileById(profileId, requestUserId);
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.OK,
         success: true,
         message: "Profile retrieved successfully",
-        data: profile
+        data: profile,
     });
 }));
 exports.ProfileController = {

@@ -29,12 +29,12 @@ const seedSuperAdmin = () => __awaiter(void 0, void 0, void 0, function* () {
         // 🔐 HASH PASSWORD
         const hashedPassword = yield bcryptjs_1.default.hash(envConfig_1.envVars.SUPER_ADMIN_PASSWORD, 12);
         const payload = {
-            name: "Shadi Mate",
+            name: "Mohammad Salim",
             role: user_interface_1.TUserRole.ADMIN,
             email: envConfig_1.envVars.SUPER_ADMIN_EMAIL,
             password: hashedPassword, // ✅ FIXED
             isVerified: true,
-            phone: "01711111111",
+            phone: "01581891023",
             isDeleted: false,
             subscription: "premium",
         };
