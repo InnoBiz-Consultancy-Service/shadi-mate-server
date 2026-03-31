@@ -31,9 +31,11 @@ export const chatHandler = (socket: Socket) => {
             return;
         }
 
+        // ─── Ignore check ─────────────────────────────────────────────────────
         const isIgnored = await IgnoreService.isIgnoredBy(senderId, receiverId);
 
         if (isIgnored) {
+            // ─── Ignored Message collection-এ save করো ───────────────────────
             await IgnoreService.saveIgnoredMessage({
                 senderId,
                 receiverId,
@@ -50,6 +52,7 @@ export const chatHandler = (socket: Socket) => {
                 status: "sent",
                 createdAt: new Date(),
             });
+
 
             return;
         }

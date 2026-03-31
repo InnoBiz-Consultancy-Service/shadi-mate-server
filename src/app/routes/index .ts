@@ -8,6 +8,8 @@ import { ChatRoutes } from "../modules/chat/chat.route"
 import LikeRoutes from "../modules/like/like.route"
 import NotificationRoutes from "../modules/notification/notification.route"
 import IgnoreRoutes from "../modules/ignore/ignore.route"
+import BlockRoutes from "../modules/block/block.route"
+import ReportRoutes from "../modules/report/report.route"
 
 export const router = Router()
 
@@ -48,6 +50,14 @@ const moduleRoutes = [
     {
         path: "/ignore",
         route: IgnoreRoutes
+    },
+    {
+        path: "/block",
+        route: BlockRoutes
+    },
+    {
+        path: "/report",
+        route: ReportRoutes
     }
 ]
 
