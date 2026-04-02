@@ -96,12 +96,7 @@ const profileSchema = new Schema(
       unique: true,
     },
 
-    // ─── Basic Info ─────────────────────────
-    gender: {
-      type: String,
-      required: true,
-        enum: Object.values(Gender) 
-    },
+    
     birthDate: {
       type: Date,
     },
