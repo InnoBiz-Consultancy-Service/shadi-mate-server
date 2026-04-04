@@ -1,3 +1,5 @@
+import { Types } from "mongoose";
+
 export enum Gender {
     MALE = "male",
     FEMALE = "female",
@@ -36,20 +38,30 @@ export interface QueryParams {
     sort?: string;
 }
 export enum Habits {
-  READING_BOOKS = "Reading Books",
-  TRAVELING = "Traveling",
-  COOKING = "Cooking",
-  SPORTS = "Sports",
-  GYM_FITNESS = "Gym/Fitness",
-  WATCHING_MOVIES = "Watching Movies",
-  LISTENING_TO_MUSIC = "Listening to Music",
-  PHOTOGRAPHY = "Photography",
-  GARDENING = "Gardening",
-  GAMING = "Gaming",
-  WRITING = "Writing",
-  ART_AND_CRAFT = "Art & Craft",
-  SOCIAL_WORK = "Social Work",
-  ENTREPRENEURSHIP = "Entrepreneurship",
-  TECHNOLOGY = "Technology",
-  OTHERS = "others",
+    READING_BOOKS = "Reading Books",
+    TRAVELING = "Traveling",
+    COOKING = "Cooking",
+    SPORTS = "Sports",
+    GYM_FITNESS = "Gym/Fitness",
+    WATCHING_MOVIES = "Watching Movies",
+    LISTENING_TO_MUSIC = "Listening to Music",
+    PHOTOGRAPHY = "Photography",
+    GARDENING = "Gardening",
+    GAMING = "Gaming",
+    WRITING = "Writing",
+    ART_AND_CRAFT = "Art & Craft",
+    SOCIAL_WORK = "Social Work",
+    ENTREPRENEURSHIP = "Entrepreneurship",
+    TECHNOLOGY = "Technology",
+    OTHERS = "others",
 }
+export interface IProfileVisit extends Document {
+    _id: Types.ObjectId;
+    visitorId: Types.ObjectId;
+    profileOwnerId: Types.ObjectId;
+    visitCount: number;
+    visitedAt: Date;
+    createdAt: Date;
+    updatedAt: Date;
+}
+

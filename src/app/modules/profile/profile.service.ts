@@ -6,6 +6,7 @@ import { AggregationBuilder } from "../../../utils/profileQueryBuilder";
 import { QueryParams } from "./profile.interface";
 import { invalidateProfileCache } from "../like/like.servce";
 import { calculateCompletionPercentage, getCompletionLabel } from "./profileCompletaion";
+import { ProfileVisitService } from "../profileVisit/profileVisit.service";
 
 // ─── Profile Completion Check (boolean — isProfileCompleted flag এর জন্য) ─────
 const checkProfileCompletion = (profile: any) => {
@@ -185,7 +186,14 @@ const getProfileById = async (profileId: string, requestUserId?: string) => {
 
     if (!profile) throw new AppError(StatusCodes.NOT_FOUND, "Profile not found");
 
+    // ─── Visit record করো (নিজের profile হলে করবে না) ───────────────────────
     const profileUserId = (profile.userId as any)?._id?.toString();
+    if (requestUserId && profileUserId !== requestUserId) {
+        // fire-and-forget — visit log fail হলে profile fetch block হবে না
+        ProfileVisitService.recordVisit(requestUserId, profileUserId).catch(() => { });
+    }
+
+    // ─── নিজের profile দেখলে completion percentage দেখাবে ────────────────────
     if (requestUserId && profileUserId === requestUserId) {
         const user = await User.findById(requestUserId).lean();
         const completion = calculateCompletionPercentage(user, profile);

@@ -37,8 +37,10 @@ const chatHandler = (socket) => {
             socket.emit("error", { message: "receiverId and message are required" });
             return;
         }
+        // ─── Ignore check ─────────────────────────────────────────────────────
         const isIgnored = yield ignore_service_1.IgnoreService.isIgnoredBy(senderId, receiverId);
         if (isIgnored) {
+            // ─── Ignored Message collection-এ save করো ───────────────────────
             yield ignore_service_1.IgnoreService.saveIgnoredMessage({
                 senderId,
                 receiverId,

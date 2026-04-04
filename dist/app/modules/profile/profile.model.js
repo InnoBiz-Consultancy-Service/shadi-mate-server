@@ -77,12 +77,6 @@ const profileSchema = new mongoose_1.Schema({
         required: true,
         unique: true,
     },
-    // ─── Basic Info ─────────────────────────
-    gender: {
-        type: String,
-        required: true,
-        enum: Object.values(profile_interface_1.Gender)
-    },
     birthDate: {
         type: Date,
     },
