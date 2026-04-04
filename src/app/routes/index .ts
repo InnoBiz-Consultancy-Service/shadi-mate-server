@@ -10,6 +10,7 @@ import NotificationRoutes from "../modules/notification/notification.route"
 import IgnoreRoutes from "../modules/ignore/ignore.route"
 import BlockRoutes from "../modules/block/block.route"
 import ReportRoutes from "../modules/report/report.route"
+import ProfileVisitRoutes from "../modules/profileVisit/profileVisit.route"
 
 export const router = Router()
 
@@ -58,6 +59,10 @@ const moduleRoutes = [
     {
         path: "/report",
         route: ReportRoutes
+    },
+    {
+        path: "/profile-visits",
+        route: ProfileVisitRoutes
     }
 ]
 

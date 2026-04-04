@@ -20,6 +20,7 @@ const user_model_1 = require("../user/user.model");
 const profileQueryBuilder_1 = require("../../../utils/profileQueryBuilder");
 const like_servce_1 = require("../like/like.servce");
 const profileCompletaion_1 = require("./profileCompletaion");
+const profileVisit_service_1 = require("../profileVisit/profileVisit.service");
 // ─── Profile Completion Check (boolean — isProfileCompleted flag এর জন্য) ─────
 const checkProfileCompletion = (profile) => {
     var _a, _b, _c, _d, _e;
@@ -144,7 +145,13 @@ const getProfileById = (profileId, requestUserId) => __awaiter(void 0, void 0, v
         .lean();
     if (!profile)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Profile not found");
+    // ─── Visit record করো (নিজের profile হলে করবে না) ───────────────────────
     const profileUserId = (_b = (_a = profile.userId) === null || _a === void 0 ? void 0 : _a._id) === null || _b === void 0 ? void 0 : _b.toString();
+    if (requestUserId && profileUserId !== requestUserId) {
+        // fire-and-forget — visit log fail হলে profile fetch block হবে না
+        profileVisit_service_1.ProfileVisitService.recordVisit(requestUserId, profileUserId).catch(() => { });
+    }
+    // ─── নিজের profile দেখলে completion percentage দেখাবে ────────────────────
     if (requestUserId && profileUserId === requestUserId) {
         const user = yield user_model_1.User.findById(requestUserId).lean();
         const completion = (0, profileCompletaion_1.calculateCompletionPercentage)(user, profile);

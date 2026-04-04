@@ -13,6 +13,10 @@ const dreamPartner_route_1 = require("../modules/dreamPartner/dreamPartner.route
 const chat_route_1 = require("../modules/chat/chat.route");
 const like_route_1 = __importDefault(require("../modules/like/like.route"));
 const notification_route_1 = __importDefault(require("../modules/notification/notification.route"));
+const ignore_route_1 = __importDefault(require("../modules/ignore/ignore.route"));
+const block_route_1 = __importDefault(require("../modules/block/block.route"));
+const report_route_1 = __importDefault(require("../modules/report/report.route"));
+const profileVisit_route_1 = __importDefault(require("../modules/profileVisit/profileVisit.route"));
 exports.router = (0, express_1.Router)();
 const moduleRoutes = [
     {
@@ -46,6 +50,22 @@ const moduleRoutes = [
     {
         path: "/likes",
         route: like_route_1.default
+    },
+    {
+        path: "/ignore",
+        route: ignore_route_1.default
+    },
+    {
+        path: "/block",
+        route: block_route_1.default
+    },
+    {
+        path: "/report",
+        route: report_route_1.default
+    },
+    {
+        path: "/profile-visits",
+        route: profileVisit_route_1.default
     }
 ];
 moduleRoutes.forEach((route) => {
