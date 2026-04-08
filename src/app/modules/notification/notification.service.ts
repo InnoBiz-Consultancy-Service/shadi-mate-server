@@ -1,9 +1,33 @@
 import { StatusCodes } from "http-status-codes";
 import AppError from "../../../helpers/AppError";
 import { Notification } from "./notification.model";
-import { TNotificationType } from "./notification.interface";
+import { TNotificationType, INotificationMetadata } from "./notification.interface";
+
+// ─── Message Templates ────────────────────────────────────────────────────────
+const getNotificationMessage = (
+    type: TNotificationType,
+    senderName: string,
+    metadata?: INotificationMetadata
+): string => {
+    switch (type) {
+        case "new_message":
+            return `${senderName} Send you a new message`;
+        case "like":
+            return `${senderName} liked your profile`;
+        case "profile_visit":
+            return `${senderName} visited your profile`;
+        case "subscription_expiry_reminder":
+            // Cron job থেকে directly message পাঠানো হয় — এখানে fallback
+            return metadata?.daysLeft === 1
+                ? `Your Premium subscription expires tomorrow (${metadata?.endDate ? new Date(metadata.endDate).toLocaleDateString("en-US") : ""}). Renew now.`
+                : `Your Premium subscription ${metadata?.daysLeft ?? ""} days left.`;
+        default:
+            return "You have a new notification";
+    }
+};
 
 // ─── Create & Deliver Notification ───────────────────────────────────────────
+// io এবং redisClient বাইরে থেকে পাস — circular import এড়াতে
 const createAndDeliver = async ({
     io,
     redisClient,
@@ -12,6 +36,7 @@ const createAndDeliver = async ({
     senderName,
     type,
     metadata = {},
+    customMessage,
 }: {
     io: any;
     redisClient: any;
@@ -19,21 +44,17 @@ const createAndDeliver = async ({
     senderId: string;
     senderName: string;
     type: TNotificationType;
-    metadata?: { messageId?: string; conversationWith?: string };
+    metadata?: INotificationMetadata;
+    customMessage?: string; // subscription reminder এ custom message পাঠাতে
 }) => {
-    // ─── Notification message তৈরি করো ───────────────────────────────────────
-    const messageMap: Record<TNotificationType, string> = {
-        new_message: `${senderName} তোমাকে একটি message করেছে`,
-        like: `${senderName} তোমার profile like করেছে`,
-        profile_visit: `${senderName} তোমার profile দেখেছে`,
-    };
+    const message = customMessage ?? getNotificationMessage(type, senderName, metadata);
 
-    // ─── DB-তে save করো (offline support) ────────────────────────────────────
+    // ─── DB তে save করো (offline support) ────────────────────────────────────
     const notification = await Notification.create({
         recipientId,
         senderId,
         type,
-        message: messageMap[type],
+        message,
         isRead: false,
         metadata,
     });
@@ -42,15 +63,14 @@ const createAndDeliver = async ({
     const receiverSocketId = await redisClient.hget("onlineUsers", recipientId);
 
     if (receiverSocketId) {
-        // ─── Realtime push ────────────────────────────────────────────────────
         io.to(receiverSocketId).emit("new-notification", {
-            _id: notification._id,
+            _id:       notification._id,
             type,
-            message: messageMap[type],
+            message,
             senderId,
             senderName,
             metadata,
-            isRead: false,
+            isRead:    false,
             createdAt: notification.createdAt,
         });
     }
@@ -85,7 +105,7 @@ const getMyNotifications = async (userId: string, page = 1, limit = 20) => {
     };
 };
 
-// ─── Mark Single Notification as Read ────────────────────────────────────────
+// ─── Mark Single as Read ──────────────────────────────────────────────────────
 const markAsRead = async (notificationId: string, userId: string) => {
     const notification = await Notification.findOneAndUpdate(
         { _id: notificationId, recipientId: userId },
@@ -106,7 +126,6 @@ const markAllAsRead = async (userId: string) => {
         { recipientId: userId, isRead: false },
         { isRead: true }
     );
-
     return { message: "All notifications marked as read" };
 };
 
@@ -124,13 +143,12 @@ const deleteNotification = async (notificationId: string, userId: string) => {
     return { message: "Notification deleted" };
 };
 
-// ─── Get Unread Count only ────────────────────────────────────────────────────
+// ─── Get Unread Count ─────────────────────────────────────────────────────────
 const getUnreadCount = async (userId: string) => {
     const count = await Notification.countDocuments({
         recipientId: userId,
         isRead: false,
     });
-
     return { unreadCount: count };
 };
 

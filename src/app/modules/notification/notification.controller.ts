@@ -7,7 +7,7 @@ import { NotificationService } from "./notification.service";
 // ─── Get My Notifications ─────────────────────────────────────────────────────
 const getMyNotifications = catchAsync(async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
-    const page = parseInt(req.query.page as string) || 1;
+    const page  = parseInt(req.query.page  as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
 
     const result = await NotificationService.getMyNotifications(userId, page, limit);
@@ -37,7 +37,7 @@ const getUnreadCount = catchAsync(async (req: Request, res: Response) => {
 // ─── Mark Single as Read ──────────────────────────────────────────────────────
 const markAsRead = catchAsync(async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
-    const { id } = req.params;
+    const { id }  = req.params;
 
     const result = await NotificationService.markAsRead(id, userId);
 
@@ -64,7 +64,7 @@ const markAllAsRead = catchAsync(async (req: Request, res: Response) => {
 // ─── Delete Notification ──────────────────────────────────────────────────────
 const deleteNotification = catchAsync(async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
-    const { id } = req.params;
+    const { id }  = req.params;
 
     const result = await NotificationService.deleteNotification(id, userId);
 

@@ -15,7 +15,12 @@ const notificationSchema = new Schema<INotification>(
         },
         type: {
             type: String,
-            enum: ["new_message", "like", "profile_visit"],
+            enum: [
+                "new_message",
+                "like",
+                "profile_visit",
+                "subscription_expiry_reminder",
+            ],
             required: true,
         },
         message: {
@@ -27,16 +32,22 @@ const notificationSchema = new Schema<INotification>(
             default: false,
         },
         metadata: {
-            messageId: { type: String },
+            // ─── Chat ─────────────────────────────────────────────────────────
+            messageId:        { type: String },
             conversationWith: { type: String },
+            // ─── Subscription reminder ────────────────────────────────────────
+            daysLeft:         { type: Number },
+            endDate:          { type: String },
+            // ─── Report (admin) ───────────────────────────────────────────────
+            reportId:         { type: String },
+            reportedUserId:   { type: String },
+            reason:           { type: String },
         },
     },
     { timestamps: true }
 );
 
-// ─── Index: recipientId দিয়ে fast query ──────────────────────────────────────
 notificationSchema.index({ recipientId: 1, createdAt: -1 });
-// ─── Index: unread count fast fetch ──────────────────────────────────────────
 notificationSchema.index({ recipientId: 1, isRead: 1 });
 
 export const Notification = model<INotification>("Notification", notificationSchema);

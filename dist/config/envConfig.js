@@ -7,7 +7,7 @@ exports.envVars = void 0;
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const loadEnvVariables = () => {
-    const requiredEnvVariables = ["PORT", "DB_URL", "NODE_ENV", "JWT_SECRET", "JWT_EXPIRES_IN", "SUPER_ADMIN_EMAIL", "SUPER_ADMIN_PASSWORD", "BCRYPT_SALT_ROUND", "FRONTEND_URL", "REDIS_URL"];
+    const requiredEnvVariables = ["PORT", "DB_URL", "NODE_ENV", "JWT_SECRET", "JWT_EXPIRES_IN", "SUPER_ADMIN_EMAIL", "SUPER_ADMIN_PASSWORD", "BCRYPT_SALT_ROUND", "FRONTEND_URL", "REDIS_URL", "EPS_HASH_KEY", "EPS_PASSWORD", "EPS_USERNAME", "EPS_STORE_ID", "EPS_MERCHANT_ID", "BACKEND_URL"];
     requiredEnvVariables.forEach(key => {
         if (!process.env[key]) {
             throw new Error(`Missing required environment variable: ${key}`);
@@ -24,7 +24,13 @@ const loadEnvVariables = () => {
         SUPER_ADMIN_PASSWORD: process.env.SUPER_ADMIN_PASSWORD,
         BCRYPT_SALT_ROUND: process.env.BCRYPT_SALT_ROUND,
         FRONTEND_URL: process.env.FRONEND_URL,
-        REDIS_URL: process.env.REDIS_URL
+        REDIS_URL: process.env.REDIS_URL,
+        EPS_HASH_KEY: process.env.EPS_HASH_KEY,
+        EPS_PASSWORD: process.env.EPS_PASSWORD,
+        EPS_USERNAME: process.env.EPS_USERNAME,
+        EPS_STORE_ID: process.env.EPS_STORE_ID,
+        EPS_MERCHANT_ID: process.env.EPS_MERCHANT_ID,
+        BACKEND_URL: process.env.BACKEND_URL
     };
 };
 exports.envVars = loadEnvVariables();
