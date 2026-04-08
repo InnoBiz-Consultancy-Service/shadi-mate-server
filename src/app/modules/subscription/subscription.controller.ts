@@ -84,21 +84,21 @@ console.log( `${envVars.FRONTEND_URL}/paymentSuccess?tran_id=${tranId}` );
         );
     } catch (err) {
         console.error("❌ Payment success callback error:", err);
-        return res.redirect(`${envVars.FRONTEND_URL}/payment/fail?tran_id=${tranId}`);
+        return res.redirect(`${envVars.FRONTEND_URL}/paymentFail?tran_id=${tranId}`);
     }
 });
 // ─── Payment Fail Callback ────────────────────────────────────────────────────
 const paymentFail = catchAsync(async (req: Request, res: Response) => {
     const callbackData = { ...req.body, ...req.query };
     await SubscriptionService.handlePaymentFail(callbackData);
-    res.redirect(`${envVars.FRONTEND_URL}/payment/fail`);
+    res.redirect(`${envVars.FRONTEND_URL}/paymentFail`);
 });
 
 // ─── Payment Cancel Callback ──────────────────────────────────────────────────
 const paymentCancel = catchAsync(async (req: Request, res: Response) => {
     const callbackData = { ...req.body, ...req.query };
     await SubscriptionService.handlePaymentCancel(callbackData);
-    res.redirect(`${envVars.FRONTEND_URL}/payment/cancel`);
+    res.redirect(`${envVars.FRONTEND_URL}/paymentCancel`);
 });
 
 // ─── Get My Subscription ──────────────────────────────────────────────────────
