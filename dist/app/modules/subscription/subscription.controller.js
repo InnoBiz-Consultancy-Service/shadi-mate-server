@@ -54,7 +54,6 @@ const initiatePayment = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(voi
 const paymentSuccess = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const callbackData = Object.assign(Object.assign({}, req.body), req.query);
     console.log("✅ EPS Success Callback Hit:", callbackData);
-    // 🔥 IMPORTANT: normalize keys (EPS case mismatch fix)
     const normalizedData = {
         merchantTransactionId: callbackData.merchantTransactionId ||
             callbackData.MerchantTransactionId,
@@ -63,22 +62,21 @@ const paymentSuccess = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void
         epsTransactionId: callbackData.EPSTransactionId ||
             callbackData.epsTransactionId,
     };
-    if (!normalizedData.merchantTransactionId) {
-        console.error("❌ Missing MerchantTransactionId");
-        return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/payment/fail`);
-    }
+    // Path parameter ব্যবহার না করে শুধু query parameter দিয়ে redirect
+    const tranId = normalizedData.merchantTransactionId || "unknown";
     try {
         const result = yield subscription_service_1.SubscriptionService.handlePaymentSuccess(normalizedData);
-        // 🔁 Duplicate callback safe
+        console.log(`${envConfig_1.envVars.FRONTEND_URL}/paymentSuccess?tran_id=${tranId}`);
+        // Already processed
         if (result === null || result === void 0 ? void 0 : result.alreadyProcessed) {
-            return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/payment/success?status=already_processed`);
+            return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/paymentSuccess?status=already_processed`);
         }
         // ✅ SUCCESS redirect
-        return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/payment/success?tran_id=${normalizedData.merchantTransactionId}`);
+        return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/paymentSuccess?tran_id=${tranId}`);
     }
     catch (err) {
         console.error("❌ Payment success callback error:", err);
-        return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/payment/fail?tran_id=${normalizedData.merchantTransactionId}`);
+        return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/payment/fail?tran_id=${tranId}`);
     }
 }));
 // ─── Payment Fail Callback ────────────────────────────────────────────────────

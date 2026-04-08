@@ -23,7 +23,7 @@ const loadEnvVariables = () => {
         SUPER_ADMIN_EMAIL: process.env.SUPER_ADMIN_EMAIL,
         SUPER_ADMIN_PASSWORD: process.env.SUPER_ADMIN_PASSWORD,
         BCRYPT_SALT_ROUND: process.env.BCRYPT_SALT_ROUND,
-        FRONTEND_URL: process.env.FRONEND_URL,
+        FRONTEND_URL: process.env.FRONTEND_URL,
         REDIS_URL: process.env.REDIS_URL,
         EPS_HASH_KEY: process.env.EPS_HASH_KEY,
         EPS_PASSWORD: process.env.EPS_PASSWORD,

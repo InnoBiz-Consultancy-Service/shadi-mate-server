@@ -10,17 +10,17 @@ const SubscriptionRoutes = Router();
 SubscriptionRoutes.get("/plans", SubscriptionController.getPlans);
 
 // EPS Callback URLs (Public — EPS server থেকে আসবে)
+// Remove the :id parameter - these should be exact paths
 SubscriptionRoutes.post("/payment/success", SubscriptionController.paymentSuccess);
-SubscriptionRoutes.get("/payment/success",  SubscriptionController.paymentSuccess);
-SubscriptionRoutes.post("/payment/fail",    SubscriptionController.paymentFail);
-SubscriptionRoutes.get("/payment/fail",     SubscriptionController.paymentFail);
-SubscriptionRoutes.post("/payment/cancel",  SubscriptionController.paymentCancel);
-SubscriptionRoutes.get("/payment/cancel",   SubscriptionController.paymentCancel);
+SubscriptionRoutes.get("/payment/success", SubscriptionController.paymentSuccess);
+SubscriptionRoutes.post("/payment/fail", SubscriptionController.paymentFail);
+SubscriptionRoutes.get("/payment/fail", SubscriptionController.paymentFail);
+SubscriptionRoutes.post("/payment/cancel", SubscriptionController.paymentCancel);
+SubscriptionRoutes.get("/payment/cancel", SubscriptionController.paymentCancel);
 
 // ─── Protected ────────────────────────────────────────────────────────────────
 
 // POST /api/v1/subscriptions/initiate
-// Body: { plan: "1month" | "3month" | "6month" }
 SubscriptionRoutes.post("/initiate", authenticate, SubscriptionController.initiatePayment);
 
 // GET /api/v1/subscriptions/my

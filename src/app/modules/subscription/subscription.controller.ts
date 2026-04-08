@@ -52,47 +52,39 @@ const paymentSuccess = catchAsync(async (req: Request, res: Response) => {
 
     console.log("✅ EPS Success Callback Hit:", callbackData);
 
-    // 🔥 IMPORTANT: normalize keys (EPS case mismatch fix)
     const normalizedData = {
         merchantTransactionId:
             callbackData.merchantTransactionId ||
             callbackData.MerchantTransactionId,
-
         status:
             callbackData.Status ||
             callbackData.status,
-
         epsTransactionId:
             callbackData.EPSTransactionId ||
             callbackData.epsTransactionId,
     };
 
-    if (!normalizedData.merchantTransactionId) {
-        console.error("❌ Missing MerchantTransactionId");
-        return res.redirect(`${envVars.FRONTEND_URL}/payment/fail`);
-    }
+    // Path parameter ব্যবহার না করে শুধু query parameter দিয়ে redirect
+    const tranId = normalizedData.merchantTransactionId || "unknown";
 
     try {
         const result = await SubscriptionService.handlePaymentSuccess(normalizedData);
+console.log( `${envVars.FRONTEND_URL}/paymentSuccess?tran_id=${tranId}` );
 
-        // 🔁 Duplicate callback safe
+        // Already processed
         if (result?.alreadyProcessed) {
             return res.redirect(
-                `${envVars.FRONTEND_URL}/payment/success?status=already_processed`
+                `${envVars.FRONTEND_URL}/paymentSuccess?status=already_processed`
             );
         }
 
         // ✅ SUCCESS redirect
         return res.redirect(
-            `${envVars.FRONTEND_URL}/payment/success?tran_id=${normalizedData.merchantTransactionId}`
+            `${envVars.FRONTEND_URL}/paymentSuccess?tran_id=${tranId}`
         );
-
     } catch (err) {
         console.error("❌ Payment success callback error:", err);
-
-        return res.redirect(
-            `${envVars.FRONTEND_URL}/payment/fail?tran_id=${normalizedData.merchantTransactionId}`
-        );
+        return res.redirect(`${envVars.FRONTEND_URL}/payment/fail?tran_id=${tranId}`);
     }
 });
 // ─── Payment Fail Callback ────────────────────────────────────────────────────
