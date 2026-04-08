@@ -89,9 +89,9 @@ const initiatePayment = async (
     const merchantTransactionId = generateMerchantTransactionId();
     const customerOrderId = `ORD${Date.now()}`;
 
-    const successUrl = `${envVars.BACKEND_URL}/api/v1/subscriptions/payment/success`;
-    const failUrl    = `${envVars.BACKEND_URL}/api/v1/subscriptions/payment/fail`;
-    const cancelUrl  = `${envVars.BACKEND_URL}/api/v1/subscriptions/payment/cancel`;
+    const successUrl = `${envVars.BACKEND_URL}/subscriptions/payment/success`;
+    const failUrl    = `${envVars.BACKEND_URL}/subscriptions/payment/fail`;
+    const cancelUrl  = `${envVars.BACKEND_URL}/subscriptions/payment/cancel`;
 
     // ─── Payment record (pending) ─────────────────────────────────────────────
     await Payment.create({
