@@ -11,6 +11,7 @@ import IgnoreRoutes from "../modules/ignore/ignore.route"
 import BlockRoutes from "../modules/block/block.route"
 import ReportRoutes from "../modules/report/report.route"
 import ProfileVisitRoutes from "../modules/profileVisit/profileVisit.route"
+import SubscriptionRoutes from "../modules/subscription/subscription.route"
 
 export const router = Router()
 
@@ -63,6 +64,10 @@ const moduleRoutes = [
     {
         path: "/profile-visits",
         route: ProfileVisitRoutes
+    },
+    {
+        path: "/subscriptions",
+        route: SubscriptionRoutes
     }
 ]
 
