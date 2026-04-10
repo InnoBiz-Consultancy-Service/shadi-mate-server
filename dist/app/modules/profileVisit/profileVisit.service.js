@@ -18,8 +18,8 @@ const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const profileVisit_model_1 = require("./profileVisit.model");
 const user_model_1 = require("../user/user.model");
 const notification_service_1 = require("../notification/notification.service");
-const redis_1 = require("../../../utils/redis");
 const socketSingleton_1 = require("../../../socket/handlers/socketSingleton");
+const redis_1 = __importDefault(require("../../../utils/redis"));
 // ─── Record Profile Visit ─────────────────────────────────────────────────────
 // profile.service.ts এর getProfileById থেকে call হবে
 const recordVisit = (visitorId, profileOwnerId) => __awaiter(void 0, void 0, void 0, function* () {
@@ -38,7 +38,7 @@ const recordVisit = (visitorId, profileOwnerId) => __awaiter(void 0, void 0, voi
         const visitorName = (_a = visitor === null || visitor === void 0 ? void 0 : visitor.name) !== null && _a !== void 0 ? _a : "Someone";
         yield notification_service_1.NotificationService.createAndDeliver({
             io: (0, socketSingleton_1.getIO)(),
-            redisClient: redis_1.redisClient,
+            redisClient: redis_1.default,
             recipientId: profileOwnerId,
             senderId: visitorId,
             senderName: visitorName,

@@ -1,5 +1,5 @@
 import { Socket } from "socket.io";
-import { redisClient } from "../../utils/redis";
+import redisClient from "../../utils/redis";
 
 export const typingHandler = (io: any, socket: Socket) => {
     socket.on("typing", async ({ toUserId }: { toUserId: string }) => {
@@ -9,7 +9,7 @@ export const typingHandler = (io: any, socket: Socket) => {
         const receiverSocketId = await redisClient.hget("onlineUsers", toUserId);
 
         if (receiverSocketId) {
-            io.to(receiverSocketId).emit("typing", { fromUserId: senderId });
+            io.to(String(receiverSocketId)).emit("typing", { fromUserId: senderId });
         }
     });
 

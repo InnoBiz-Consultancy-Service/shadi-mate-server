@@ -3,12 +3,12 @@ import { SubscriptionService } from "../app/modules/subscription/subscription.se
 import { Subscription } from "../app/modules/subscription/subscription.model";
 import { User } from "../app/modules/user/user.model";
 import { Notification } from "../app/modules/notification/notification.model";
-import { redisClient } from "../utils/redis";
 import { getIO } from "../socket/handlers/socketSingleton";
+import redisClient from "./redis";
 
 // ─── Redis Key ────────────────────────────────────────────────────────────────
 // প্রতিদিন একবারই notification যাবে — Redis দিয়ে track করবো
-// TTL 25 ঘন্টা — যাতে পরদিন আবার পাঠানো যায়
+
 const REMINDER_KEY = (userId: string) => `sub:reminder:${userId}`;
 const REMINDER_TTL = 60 * 60 * 25; // 25 ঘন্টা
 
@@ -20,7 +20,6 @@ const sendExpiryReminder = async (
     endDate: Date
 ) => {
     try {
-        // ─── Redis check: আজকে already notification গেছে? ───────────────────
         const alreadySent = await redisClient.get(REMINDER_KEY(userId));
         if (alreadySent) {
             console.log(`⏭️ [Reminder] Already sent today for user: ${userId}`);
@@ -28,14 +27,14 @@ const sendExpiryReminder = async (
         }
 
         const message = daysLeft === 1
-            ? `আপনার Premium subscription আগামীকাল (${endDate.toLocaleDateString("bn-BD")}) expire হবে। Renew করুন।`
-            : `আপনার Premium subscription ${daysLeft} দিন পরে (${endDate.toLocaleDateString("bn-BD")}) expire হবে।`;
+            ? `Your premium subscription (${endDate.toLocaleDateString("bn-BD")}) will expire tomorrow. Please renew it.`
+            : `Your premium subscription will expire in ${daysLeft} days (${endDate.toLocaleDateString("bn-BD")}). Please renew it.`;
 
         // ─── DB তে notification save করো ──────────────────────────────────────
         const notification = await Notification.create({
             recipientId: userId,
-            senderId:    userId,   // system notification — sender নিজেই
-            type:        "new_message", // notification type extend করতে পারো
+            senderId:    userId,   
+            type:        "new_message", 
             message,
             isRead:      false,
             metadata:    {
@@ -51,7 +50,7 @@ const sendExpiryReminder = async (
             const receiverSocketId = await redisClient.hget("onlineUsers", userId);
 
             if (receiverSocketId) {
-                io.to(receiverSocketId).emit("new-notification", {
+                io.to(String(receiverSocketId)).emit("new-notification", {
                     _id:      notification._id,
                     type:     "subscription_expiry_reminder",
                     message,
@@ -65,10 +64,8 @@ const sendExpiryReminder = async (
                 console.log(`📥 [Reminder] User offline, saved to DB: ${userId}`);
             }
         } catch (_) {
-            // Socket error হলেও DB notification already save হয়েছে — OK
         }
 
-        // ─── Redis এ mark করো — আজকের জন্য done ────────────────────────────
         await redisClient.setex(REMINDER_KEY(userId), REMINDER_TTL, "1");
 
         console.log(`✅ [Reminder] Sent (${daysLeft} day${daysLeft > 1 ? "s" : ""} left): ${userName}`);
@@ -78,13 +75,11 @@ const sendExpiryReminder = async (
     }
 };
 
-// ─── Reminder Job: প্রতিদিন সকাল ১০টায় ─────────────────────────────────────
 const runReminderJob = async () => {
     console.log("🔔 [Cron] Running subscription expiry reminder check...");
 
     const now = new Date();
 
-    // ─── 2 দিন পরে expire হবে এমন subscriptions খুঁজে বের করো ──────────────
     const twoDaysLater = new Date(now);
     twoDaysLater.setDate(twoDaysLater.getDate() + 2);
     twoDaysLater.setHours(23, 59, 59, 999);
@@ -93,7 +88,6 @@ const runReminderJob = async () => {
     twoDaysStart.setDate(twoDaysStart.getDate() + 2);
     twoDaysStart.setHours(0, 0, 0, 0);
 
-    // ─── 1 দিন পরে expire হবে ────────────────────────────────────────────────
     const oneDayLater = new Date(now);
     oneDayLater.setDate(oneDayLater.getDate() + 1);
     oneDayLater.setHours(23, 59, 59, 999);
@@ -102,7 +96,6 @@ const runReminderJob = async () => {
     oneDayStart.setDate(oneDayStart.getDate() + 1);
     oneDayStart.setHours(0, 0, 0, 0);
 
-    // ─── 2 দিন + 1 দিন দুইটাই query করো ────────────────────────────────────
     const expiringSubscriptions = await Subscription.find({
         status: "active",
         $or: [

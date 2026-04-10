@@ -15,12 +15,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LikeService = exports.invalidateProfileCache = void 0;
 const http_status_codes_1 = require("http-status-codes");
 const AppError_1 = __importDefault(require("../../../helpers/AppError"));
-const redis_1 = require("../../../utils/redis");
 const like_model_1 = require("./like.model");
 const user_model_1 = require("../user/user.model");
 const profile_model_1 = require("../profile/profile.model");
 const notification_service_1 = require("../notification/notification.service");
 const socketSingleton_1 = require("../../../socket/handlers/socketSingleton");
+const redis_1 = __importDefault(require("../../../utils/redis"));
 // ─── Cache Keys ──────────────────────────────────────────────────────────────
 const LIKE_COUNT_KEY = (userId) => `like:count:${userId}`;
 const LIKE_SENDERS_KEY = (userId) => `like:senders:${userId}`;
@@ -37,7 +37,8 @@ const batchGetProfiles = (userIds) => __awaiter(void 0, void 0, void 0, function
     const cacheKeys = userIds.map(PROFILE_CACHE_KEY);
     let cachedValues = [];
     try {
-        cachedValues = yield redis_1.redisClient.mget(...cacheKeys);
+        // ✅ node-redis v4: mGet accepts an array
+        cachedValues = yield redis_1.default.mGet(cacheKeys);
     }
     catch (_) {
         cachedValues = new Array(userIds.length).fill(null);
@@ -64,14 +65,16 @@ const batchGetProfiles = (userIds) => __awaiter(void 0, void 0, void 0, function
             .populate("address.divisionId", "name")
             .populate("address.districtId", "name")
             .lean();
-        const pipeline = redis_1.redisClient.pipeline();
+        // ✅ node-redis v4: multi() instead of pipeline()
+        const multi = redis_1.default.multi();
         for (const profile of profiles) {
             const uid = profile.userId._id.toString();
             profileMap[uid] = profile;
-            pipeline.setex(PROFILE_CACHE_KEY(uid), PROFILE_CACHE_TTL, JSON.stringify(profile));
+            // ✅ node-redis v4: setEx (camelCase) instead of setex
+            multi.setEx(PROFILE_CACHE_KEY(uid), PROFILE_CACHE_TTL, JSON.stringify(profile));
         }
         try {
-            yield pipeline.exec();
+            yield multi.exec();
         }
         catch (_) { }
     }
@@ -80,7 +83,7 @@ const batchGetProfiles = (userIds) => __awaiter(void 0, void 0, void 0, function
 // ─── Profile Cache Invalidate ─────────────────────────────────────────────────
 const invalidateProfileCache = (userId) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        yield redis_1.redisClient.del(PROFILE_CACHE_KEY(userId));
+        yield redis_1.default.del(PROFILE_CACHE_KEY(userId));
     }
     catch (_) { }
 });
@@ -115,7 +118,7 @@ const toggleLike = (fromUserId, toUserId) => __awaiter(void 0, void 0, void 0, f
             const senderName = (_a = sender === null || sender === void 0 ? void 0 : sender.name) !== null && _a !== void 0 ? _a : "Someone";
             yield notification_service_1.NotificationService.createAndDeliver({
                 io: (0, socketSingleton_1.getIO)(),
-                redisClient: redis_1.redisClient,
+                redisClient: redis_1.default,
                 recipientId: toUserId,
                 senderId: fromUserId,
                 senderName,
@@ -126,15 +129,14 @@ const toggleLike = (fromUserId, toUserId) => __awaiter(void 0, void 0, void 0, f
             });
         }
         catch (err) {
-            // Notification fail হলেও like action block হবে না
             console.error("❌ Like notification error:", err);
         }
     }
     // ─── Cache invalidate ─────────────────────────────────────────────────────
     yield Promise.all([
-        redis_1.redisClient.del(LIKE_COUNT_KEY(toUserId)),
-        redis_1.redisClient.del(LIKE_SENDERS_KEY(toUserId)),
-        redis_1.redisClient.del(MY_LIKES_KEY(fromUserId)),
+        redis_1.default.del(LIKE_COUNT_KEY(toUserId)),
+        redis_1.default.del(LIKE_SENDERS_KEY(toUserId)),
+        redis_1.default.del(MY_LIKES_KEY(fromUserId)),
     ]);
     return { action };
 });
@@ -142,14 +144,15 @@ const toggleLike = (fromUserId, toUserId) => __awaiter(void 0, void 0, void 0, f
 const getLikeCount = (targetUserId) => __awaiter(void 0, void 0, void 0, function* () {
     const cacheKey = LIKE_COUNT_KEY(targetUserId);
     try {
-        const cached = yield redis_1.redisClient.get(cacheKey);
+        const cached = yield redis_1.default.get(cacheKey);
         if (cached !== null)
             return { count: parseInt(cached) };
     }
     catch (_) { }
     const count = yield like_model_1.Like.countDocuments({ toUserId: targetUserId });
     try {
-        yield redis_1.redisClient.setex(cacheKey, LIKE_LIST_TTL, count.toString());
+        // ✅ node-redis v4: setEx (camelCase)
+        yield redis_1.default.setEx(cacheKey, LIKE_LIST_TTL, count.toString());
     }
     catch (_) { }
     return { count };
@@ -161,7 +164,7 @@ const getWhoLikedMe = (userId, subscription) => __awaiter(void 0, void 0, void 0
     }
     const cacheKey = LIKE_SENDERS_KEY(userId);
     try {
-        const cached = yield redis_1.redisClient.get(cacheKey);
+        const cached = yield redis_1.default.get(cacheKey);
         if (cached !== null)
             return JSON.parse(cached);
     }
@@ -180,7 +183,8 @@ const getWhoLikedMe = (userId, subscription) => __awaiter(void 0, void 0, void 0
         });
     });
     try {
-        yield redis_1.redisClient.setex(cacheKey, LIKE_LIST_TTL, JSON.stringify(result));
+        // ✅ node-redis v4: setEx (camelCase)
+        yield redis_1.default.setEx(cacheKey, LIKE_LIST_TTL, JSON.stringify(result));
     }
     catch (_) { }
     return result;
@@ -189,7 +193,7 @@ const getWhoLikedMe = (userId, subscription) => __awaiter(void 0, void 0, void 0
 const getMyLikes = (userId) => __awaiter(void 0, void 0, void 0, function* () {
     const cacheKey = MY_LIKES_KEY(userId);
     try {
-        const cached = yield redis_1.redisClient.get(cacheKey);
+        const cached = yield redis_1.default.get(cacheKey);
         if (cached !== null)
             return JSON.parse(cached);
     }
@@ -208,7 +212,8 @@ const getMyLikes = (userId) => __awaiter(void 0, void 0, void 0, function* () {
         });
     });
     try {
-        yield redis_1.redisClient.setex(cacheKey, LIKE_LIST_TTL, JSON.stringify(result));
+        // ✅ node-redis v4: setEx (camelCase)
+        yield redis_1.default.setEx(cacheKey, LIKE_LIST_TTL, JSON.stringify(result));
     }
     catch (_) { }
     return result;

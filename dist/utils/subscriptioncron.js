@@ -17,30 +17,28 @@ const node_cron_1 = __importDefault(require("node-cron"));
 const subscription_service_1 = require("../app/modules/subscription/subscription.service");
 const subscription_model_1 = require("../app/modules/subscription/subscription.model");
 const notification_model_1 = require("../app/modules/notification/notification.model");
-const redis_1 = require("../utils/redis");
 const socketSingleton_1 = require("../socket/handlers/socketSingleton");
+const redis_1 = __importDefault(require("./redis"));
 // ─── Redis Key ────────────────────────────────────────────────────────────────
 // প্রতিদিন একবারই notification যাবে — Redis দিয়ে track করবো
-// TTL 25 ঘন্টা — যাতে পরদিন আবার পাঠানো যায়
 const REMINDER_KEY = (userId) => `sub:reminder:${userId}`;
 const REMINDER_TTL = 60 * 60 * 25; // 25 ঘন্টা
 // ─── Send Expiry Reminder Notification ───────────────────────────────────────
 const sendExpiryReminder = (userId, userName, daysLeft, endDate) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        // ─── Redis check: আজকে already notification গেছে? ───────────────────
-        const alreadySent = yield redis_1.redisClient.get(REMINDER_KEY(userId));
+        const alreadySent = yield redis_1.default.get(REMINDER_KEY(userId));
         if (alreadySent) {
             console.log(`⏭️ [Reminder] Already sent today for user: ${userId}`);
             return;
         }
         const message = daysLeft === 1
-            ? `আপনার Premium subscription আগামীকাল (${endDate.toLocaleDateString("bn-BD")}) expire হবে। Renew করুন।`
-            : `আপনার Premium subscription ${daysLeft} দিন পরে (${endDate.toLocaleDateString("bn-BD")}) expire হবে।`;
+            ? `Your premium subscription (${endDate.toLocaleDateString("bn-BD")}) will expire tomorrow. Please renew it.`
+            : `Your premium subscription will expire in ${daysLeft} days (${endDate.toLocaleDateString("bn-BD")}). Please renew it.`;
         // ─── DB তে notification save করো ──────────────────────────────────────
         const notification = yield notification_model_1.Notification.create({
             recipientId: userId,
-            senderId: userId, // system notification — sender নিজেই
-            type: "new_message", // notification type extend করতে পারো
+            senderId: userId,
+            type: "new_message",
             message,
             isRead: false,
             metadata: {
@@ -52,9 +50,9 @@ const sendExpiryReminder = (userId, userName, daysLeft, endDate) => __awaiter(vo
         // ─── Realtime Socket notification পাঠাও ──────────────────────────────
         try {
             const io = (0, socketSingleton_1.getIO)();
-            const receiverSocketId = yield redis_1.redisClient.hget("onlineUsers", userId);
+            const receiverSocketId = yield redis_1.default.hget("onlineUsers", userId);
             if (receiverSocketId) {
-                io.to(receiverSocketId).emit("new-notification", {
+                io.to(String(receiverSocketId)).emit("new-notification", {
                     _id: notification._id,
                     type: "subscription_expiry_reminder",
                     message,
@@ -70,36 +68,30 @@ const sendExpiryReminder = (userId, userName, daysLeft, endDate) => __awaiter(vo
             }
         }
         catch (_) {
-            // Socket error হলেও DB notification already save হয়েছে — OK
         }
-        // ─── Redis এ mark করো — আজকের জন্য done ────────────────────────────
-        yield redis_1.redisClient.setex(REMINDER_KEY(userId), REMINDER_TTL, "1");
+        yield redis_1.default.setex(REMINDER_KEY(userId), REMINDER_TTL, "1");
         console.log(`✅ [Reminder] Sent (${daysLeft} day${daysLeft > 1 ? "s" : ""} left): ${userName}`);
     }
     catch (err) {
         console.error(`❌ [Reminder] Error for user ${userId}:`, err);
     }
 });
-// ─── Reminder Job: প্রতিদিন সকাল ১০টায় ─────────────────────────────────────
 const runReminderJob = () => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
     console.log("🔔 [Cron] Running subscription expiry reminder check...");
     const now = new Date();
-    // ─── 2 দিন পরে expire হবে এমন subscriptions খুঁজে বের করো ──────────────
     const twoDaysLater = new Date(now);
     twoDaysLater.setDate(twoDaysLater.getDate() + 2);
     twoDaysLater.setHours(23, 59, 59, 999);
     const twoDaysStart = new Date(now);
     twoDaysStart.setDate(twoDaysStart.getDate() + 2);
     twoDaysStart.setHours(0, 0, 0, 0);
-    // ─── 1 দিন পরে expire হবে ────────────────────────────────────────────────
     const oneDayLater = new Date(now);
     oneDayLater.setDate(oneDayLater.getDate() + 1);
     oneDayLater.setHours(23, 59, 59, 999);
     const oneDayStart = new Date(now);
     oneDayStart.setDate(oneDayStart.getDate() + 1);
     oneDayStart.setHours(0, 0, 0, 0);
-    // ─── 2 দিন + 1 দিন দুইটাই query করো ────────────────────────────────────
     const expiringSubscriptions = yield subscription_model_1.Subscription.find({
         status: "active",
         $or: [

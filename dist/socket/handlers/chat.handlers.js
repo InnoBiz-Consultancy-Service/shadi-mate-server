@@ -8,14 +8,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.chatHandler = void 0;
-const redis_1 = require("../../utils/redis");
 const chat_model_1 = require("../../app/modules/chat/chat.model");
 const user_model_1 = require("../../app/modules/user/user.model");
 const notification_service_1 = require("../../app/modules/notification/notification.service");
 const ignore_service_1 = require("../../app/modules/ignore/ignore.service");
 const socketSingleton_1 = require("./socketSingleton");
+const redis_1 = __importDefault(require("../../utils/redis"));
 const chatHandler = (socket) => {
     socket.on("send-message", (data) => __awaiter(void 0, void 0, void 0, function* () {
         var _a;
@@ -68,10 +71,10 @@ const chatHandler = (socket) => {
         });
         console.log(`💬 Message saved: ${senderId} → ${receiverId}`);
         const io = (0, socketSingleton_1.getIO)();
-        const receiverSocketId = yield redis_1.redisClient.hget("onlineUsers", receiverId);
+        const receiverSocketId = yield redis_1.default.hget("onlineUsers", receiverId);
         if (receiverSocketId) {
             yield chat_model_1.Message.findByIdAndUpdate(savedMessage._id, { status: "delivered" });
-            io.to(receiverSocketId).emit("receive-message", {
+            io.to(String(receiverSocketId)).emit("receive-message", {
                 _id: savedMessage._id,
                 senderId,
                 receiverId,
@@ -87,7 +90,7 @@ const chatHandler = (socket) => {
             const senderName = (_a = sender === null || sender === void 0 ? void 0 : sender.name) !== null && _a !== void 0 ? _a : "Someone";
             yield notification_service_1.NotificationService.createAndDeliver({
                 io,
-                redisClient: redis_1.redisClient,
+                redisClient: redis_1.default,
                 recipientId: receiverId,
                 senderId,
                 senderName,

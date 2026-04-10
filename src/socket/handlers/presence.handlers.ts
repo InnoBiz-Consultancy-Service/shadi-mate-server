@@ -1,6 +1,6 @@
 import { Socket } from "socket.io";
-import { redisClient } from "../../utils/redis";
 import { verifyToken } from "../../utils/socket.auth";
+import redisClient from "../../utils/redis";
 
 export const presenceHandler = (socket: Socket) => {
     const token = socket.handshake.query.token as string;

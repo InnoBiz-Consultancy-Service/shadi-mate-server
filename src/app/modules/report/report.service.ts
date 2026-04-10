@@ -3,17 +3,17 @@ import AppError from "../../../helpers/AppError";
 import { Report } from "./report.model";
 import { User } from "../user/user.model";
 import { Notification } from "../notification/notification.model";
-import { redisClient } from "../../../utils/redis";
 import { getIO } from "../../../socket/handlers/socketSingleton";
+import redisClient from "../../../utils/redis";
 
 const REASON_LABELS: Record<string, string> = {
-    harassment: "হয়রানি",
-    fake_profile: "ভুয়া প্রোফাইল",
-    inappropriate_content: "অনুপযুক্ত বিষয়বস্তু",
-    spam: "স্প্যাম",
-    hate_speech: "ঘৃণামূলক বক্তব্য",
-    scam: "প্রতারণা",
-    other: "অন্যান্য",
+    harassment: "harassment",
+    fake_profile: "fake profile",
+    inappropriate_content: "inappropriate content",
+    spam: "spam",
+    hate_speech: "hate speech",
+    scam: "scam",
+    other: "other",
 };
 
 // ─── Submit Report ────────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ const notifyAdmins = async (
 
             const adminSocketId = await redisClient.hget("onlineUsers", adminId);
             if (adminSocketId) {
-                io.to(adminSocketId).emit("new-report", {
+                io.to(String(adminSocketId)).emit("new-report", {
                     _id: notification._id,
                     type: "report",
                     message: notificationMessage,

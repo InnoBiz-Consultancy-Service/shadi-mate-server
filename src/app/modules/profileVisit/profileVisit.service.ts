@@ -3,8 +3,8 @@ import AppError from "../../../helpers/AppError";
 import { ProfileVisit } from "./profileVisit.model";
 import { User } from "../user/user.model";
 import { NotificationService } from "../notification/notification.service";
-import { redisClient } from "../../../utils/redis";
 import { getIO } from "../../../socket/handlers/socketSingleton";
+import redisClient from "../../../utils/redis";
 
 // ─── Record Profile Visit ─────────────────────────────────────────────────────
 // profile.service.ts এর getProfileById থেকে call হবে
