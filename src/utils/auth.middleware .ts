@@ -1,9 +1,10 @@
 import { Request, Response, NextFunction } from "express";
 import { StatusCodes } from "http-status-codes";
-import AppError from "../../../helpers/AppError";
-import { verifyAccessToken, isAccessTokenBlacklisted } from "../user/token.utils";
-import { getCachedUser, setCachedUser, TCachedUser } from "../user/user.cache";
-import { User } from "../user/user.model";
+import AppError from "../helpers/AppError";
+import { isAccessTokenBlacklisted, verifyAccessToken } from "./token.utils";
+import { getCachedUser, setCachedUser, TCachedUser } from "./user.cache";
+import { User } from "../app/modules/user/user.model";
+
 
 /**
  * authenticate middleware — 4 step flow:
@@ -56,7 +57,7 @@ const authenticate = async (req: Request, _res: Response, next: NextFunction) =>
                 _id: String(dbUser._id),
                 role: dbUser.role,
                 isVerified: dbUser.isVerified,
-                isProfileCompleted: dbUser.isProfileCompleted,
+                isProfileCompleted: dbUser.isProfileCompleted as boolean,
                 subscription: dbUser.subscription,
                 isBlocked: dbUser.isBlocked,
                 isDeleted: dbUser.isDeleted,
