@@ -4,8 +4,12 @@ import AppError from "../helpers/AppError";
 import { isAccessTokenBlacklisted, verifyAccessToken } from "../utils/token.utils";
 import { getCachedUser, setCachedUser, TCachedUser } from "../utils/user.cache";
 import { User } from "../app/modules/user/user.model";
+import { JwtPayload } from "jsonwebtoken";
 
 
+export interface AuthRequest extends Request {
+    user?: JwtPayload & { id: string;  role: string };
+}
 /**
  * authenticate middleware — 4 step flow:
  *
@@ -96,3 +100,18 @@ const authenticate = async (req: Request, _res: Response, next: NextFunction) =>
 };
 
 export default authenticate;
+
+export const authorize = (...roles: string[]) => {
+    return (req: Request, res: Response, next: NextFunction) => {
+        const authReq = req as AuthRequest;
+        if (!authReq.user || !roles.includes(authReq.user.role)) {
+            return next(
+                new AppError(
+                    StatusCodes.FORBIDDEN,
+                    "You do not have permission to perform this action"
+                )
+            );
+        }
+        next();
+    };
+};

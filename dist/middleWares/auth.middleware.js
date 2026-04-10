@@ -12,6 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.authorize = void 0;
 const http_status_codes_1 = require("http-status-codes");
 const AppError_1 = __importDefault(require("../helpers/AppError"));
 const token_utils_1 = require("../utils/token.utils");
@@ -84,3 +85,13 @@ const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, func
     }
 });
 exports.default = authenticate;
+const authorize = (...roles) => {
+    return (req, res, next) => {
+        const authReq = req;
+        if (!authReq.user || !roles.includes(authReq.user.role)) {
+            return next(new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "You do not have permission to perform this action"));
+        }
+        next();
+    };
+};
+exports.authorize = authorize;

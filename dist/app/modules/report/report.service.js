@@ -18,16 +18,16 @@ const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const report_model_1 = require("./report.model");
 const user_model_1 = require("../user/user.model");
 const notification_model_1 = require("../notification/notification.model");
-const redis_1 = require("../../../utils/redis");
 const socketSingleton_1 = require("../../../socket/handlers/socketSingleton");
+const redis_1 = __importDefault(require("../../../utils/redis"));
 const REASON_LABELS = {
-    harassment: "হয়রানি",
-    fake_profile: "ভুয়া প্রোফাইল",
-    inappropriate_content: "অনুপযুক্ত বিষয়বস্তু",
-    spam: "স্প্যাম",
-    hate_speech: "ঘৃণামূলক বক্তব্য",
-    scam: "প্রতারণা",
-    other: "অন্যান্য",
+    harassment: "harassment",
+    fake_profile: "fake profile",
+    inappropriate_content: "inappropriate content",
+    spam: "spam",
+    hate_speech: "hate speech",
+    scam: "scam",
+    other: "other",
 };
 // ─── Submit Report ────────────────────────────────────────────────────────────
 const submitReport = (reporterId, reportedUserId, payload) => __awaiter(void 0, void 0, void 0, function* () {
@@ -82,9 +82,9 @@ const notifyAdmins = (reporterId, reportedUserId, reportId, reason) => __awaiter
                     reason,
                 },
             });
-            const adminSocketId = yield redis_1.redisClient.hget("onlineUsers", adminId);
+            const adminSocketId = yield redis_1.default.hget("onlineUsers", adminId);
             if (adminSocketId) {
-                io.to(adminSocketId).emit("new-report", {
+                io.to(String(adminSocketId)).emit("new-report", {
                     _id: notification._id,
                     type: "report",
                     message: notificationMessage,

@@ -1,10 +1,10 @@
 import { Socket } from "socket.io";
-import { redisClient } from "../../utils/redis";
 import { Message } from "../../app/modules/chat/chat.model";
 import { User } from "../../app/modules/user/user.model";
 import { NotificationService } from "../../app/modules/notification/notification.service";
 import { IgnoreService } from "../../app/modules/ignore/ignore.service";
 import { getIO } from "./socketSingleton";
+import redisClient from "../../utils/redis";
 
 export const chatHandler = (socket: Socket) => {
     socket.on("send-message", async (data) => {
@@ -74,7 +74,7 @@ export const chatHandler = (socket: Socket) => {
         if (receiverSocketId) {
             await Message.findByIdAndUpdate(savedMessage._id, { status: "delivered" });
 
-            io.to(receiverSocketId).emit("receive-message", {
+            io.to(String(receiverSocketId)).emit("receive-message", {
                 _id: savedMessage._id,
                 senderId,
                 receiverId,

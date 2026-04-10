@@ -8,10 +8,13 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.presenceHandler = void 0;
-const redis_1 = require("../../utils/redis");
 const socket_auth_1 = require("../../utils/socket.auth");
+const redis_1 = __importDefault(require("../../utils/redis"));
 const presenceHandler = (socket) => {
     var _a;
     const token = socket.handshake.query.token;
@@ -28,10 +31,10 @@ const presenceHandler = (socket) => {
     }
     socket.data.userId = decoded.id;
     socket.data.subscription = (_a = decoded.subscription) !== null && _a !== void 0 ? _a : "free";
-    redis_1.redisClient.hset("onlineUsers", decoded.id, socket.id);
+    redis_1.default.hset("onlineUsers", decoded.id, socket.id);
     console.log(`🟢 User ${decoded.id} is online (subscription: ${socket.data.subscription})`);
     socket.on("disconnect", () => __awaiter(void 0, void 0, void 0, function* () {
-        yield redis_1.redisClient.hdel("onlineUsers", decoded.id);
+        yield redis_1.default.hdel("onlineUsers", decoded.id);
         console.log(`🔴 User ${decoded.id} offline`);
     }));
 };

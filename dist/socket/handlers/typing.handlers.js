@@ -8,24 +8,27 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.typingHandler = void 0;
-const redis_1 = require("../../utils/redis");
+const redis_1 = __importDefault(require("../../utils/redis"));
 const typingHandler = (io, socket) => {
     socket.on("typing", (_a) => __awaiter(void 0, [_a], void 0, function* ({ toUserId }) {
         const senderId = socket.data.userId;
         if (!senderId || !toUserId)
             return;
-        const receiverSocketId = yield redis_1.redisClient.hget("onlineUsers", toUserId);
+        const receiverSocketId = yield redis_1.default.hget("onlineUsers", toUserId);
         if (receiverSocketId) {
-            io.to(receiverSocketId).emit("typing", { fromUserId: senderId });
+            io.to(String(receiverSocketId)).emit("typing", { fromUserId: senderId });
         }
     }));
     socket.on("stop-typing", (_a) => __awaiter(void 0, [_a], void 0, function* ({ toUserId }) {
         const senderId = socket.data.userId;
         if (!senderId || !toUserId)
             return;
-        const receiverSocketId = yield redis_1.redisClient.hget("onlineUsers", toUserId);
+        const receiverSocketId = yield redis_1.default.hget("onlineUsers", toUserId);
         if (receiverSocketId) {
             io.to(receiverSocketId).emit("stop-typing", { fromUserId: senderId });
         }
