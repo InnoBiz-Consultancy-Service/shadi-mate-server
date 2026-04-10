@@ -1,4 +1,4 @@
-import redisClient from "./redis.client";
+import redisClient from "../../../utils/redis";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const USER_CACHE_PREFIX = "user:";

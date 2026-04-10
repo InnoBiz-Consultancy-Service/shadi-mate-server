@@ -8,30 +8,19 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.connectRedis = exports.redisClient = void 0;
-const ioredis_1 = __importDefault(require("ioredis"));
+exports.connectRedis = void 0;
+const redis_1 = require("redis");
 const envConfig_1 = require("../config/envConfig");
-exports.redisClient = new ioredis_1.default(envConfig_1.envVars.REDIS_URL || 'redis://localhost:6379', {
-    tls: {},
-    lazyConnect: false,
-    maxRetriesPerRequest: 3,
+const redisClient = (0, redis_1.createClient)({
+    url: envConfig_1.envVars.REDIS_URL, // e.g. redis://localhost:6379
 });
-exports.redisClient.on('connect', () => console.log('✅ Redis connected'));
-exports.redisClient.on('ready', () => console.log('🔹 Redis ready'));
-exports.redisClient.on('error', (err) => console.error('❌ Redis Error:', err.message));
-exports.redisClient.on('reconnecting', () => console.log('♻️ Redis reconnecting'));
+redisClient.on("error", (err) => console.error("❌ Redis Error:", err));
+redisClient.on("connect", () => console.log("✅ Redis connected"));
 const connectRedis = () => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        yield exports.redisClient.ping();
-        console.log("☎️  Redis Connected Successfully");
-    }
-    catch (error) {
-        console.error("❌ Could not connect to Redis:", error);
-        process.exit(1);
+    if (!redisClient.isOpen) {
+        yield redisClient.connect();
     }
 });
 exports.connectRedis = connectRedis;
+exports.default = redisClient;
