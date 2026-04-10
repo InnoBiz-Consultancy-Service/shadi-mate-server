@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { LikeController } from "./like.controller";
-import { authenticate } from "../../../middleWares/auth.middleware";
-
+import authenticate from "../../../middleWares/auth.middleware";
 const LikeRoutes = Router();
 
 // ─── Toggle Like / Unlike a profile ──────────────────────────────────────────

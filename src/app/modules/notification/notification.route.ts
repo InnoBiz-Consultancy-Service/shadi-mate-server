@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { NotificationController } from "./notification.controller";
-import { authenticate } from "../../../middleWares/auth.middleware";
-
+import authenticate from "../../../middleWares/auth.middleware";
 const NotificationRoutes = Router();
 
 // GET /api/v1/notifications?page=1&limit=20

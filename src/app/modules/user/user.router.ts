@@ -2,8 +2,7 @@ import { Router } from "express";
 import { UserController } from "./user.controller";
 import { validateRequest } from "../../../middleWares/validateRequest";
 import { resetPasswordSchema, loginSchema, registerSchema, verifyOtpSchema } from "./user.validation";
-import { authenticate } from "../../../middleWares/auth.middleware";
-
+import authenticate from "../../../middleWares/auth.middleware";
 const UserRoutes = Router();
 
 // ─── Public Routes ────────────────────────────────────────────────────────────

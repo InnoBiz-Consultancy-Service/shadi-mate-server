@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { ProfileVisitController } from "./profileVisit.controller";
-import { authenticate } from "../../../middleWares/auth.middleware";
-
+import authenticate from "../../../middleWares/auth.middleware";
 const ProfileVisitRoutes = Router();
 
 // GET /api/v1/profile-visits/count

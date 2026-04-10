@@ -1,8 +1,7 @@
 // routes/dreamPartner.route.ts
 import { Router } from "express";
 import { getDreamPartnerMatches, saveDreamPartnerPreference } from "./dreamPartner.controller";
-import { authenticate } from "../../../middleWares/auth.middleware";
-
+import authenticate from "../../../middleWares/auth.middleware";
 
 const router = Router();
 

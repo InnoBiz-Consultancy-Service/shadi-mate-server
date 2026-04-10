@@ -76,20 +76,20 @@ const paymentSuccess = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void
     }
     catch (err) {
         console.error("❌ Payment success callback error:", err);
-        return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/payment/fail?tran_id=${tranId}`);
+        return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/paymentFail?tran_id=${tranId}`);
     }
 }));
 // ─── Payment Fail Callback ────────────────────────────────────────────────────
 const paymentFail = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const callbackData = Object.assign(Object.assign({}, req.body), req.query);
     yield subscription_service_1.SubscriptionService.handlePaymentFail(callbackData);
-    res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/payment/fail`);
+    res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/paymentFail`);
 }));
 // ─── Payment Cancel Callback ──────────────────────────────────────────────────
 const paymentCancel = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const callbackData = Object.assign(Object.assign({}, req.body), req.query);
     yield subscription_service_1.SubscriptionService.handlePaymentCancel(callbackData);
-    res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/payment/cancel`);
+    res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/paymentCancel`);
 }));
 // ─── Get My Subscription ──────────────────────────────────────────────────────
 const getMySubscription = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {

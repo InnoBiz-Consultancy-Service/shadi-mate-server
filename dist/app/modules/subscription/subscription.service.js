@@ -88,9 +88,9 @@ const initiatePayment = (userId, plan) => __awaiter(void 0, void 0, void 0, func
     const planConfig = exports.PLAN_CONFIG[plan];
     const merchantTransactionId = generateMerchantTransactionId();
     const customerOrderId = `ORD${Date.now()}`;
-    const successUrl = `${envConfig_1.envVars.BACKEND_URL}/api/v1/subscriptions/payment/success`;
-    const failUrl = `${envConfig_1.envVars.BACKEND_URL}/api/v1/subscriptions/payment/fail`;
-    const cancelUrl = `${envConfig_1.envVars.BACKEND_URL}/api/v1/subscriptions/payment/cancel`;
+    const successUrl = `${envConfig_1.envVars.BACKEND_URL}/subscriptions/payment/success`;
+    const failUrl = `${envConfig_1.envVars.BACKEND_URL}/subscriptions/payment/fail`;
+    const cancelUrl = `${envConfig_1.envVars.BACKEND_URL}/subscriptions/payment/cancel`;
     // ─── Payment record (pending) ─────────────────────────────────────────────
     yield subscription_model_1.Payment.create({
         userId,

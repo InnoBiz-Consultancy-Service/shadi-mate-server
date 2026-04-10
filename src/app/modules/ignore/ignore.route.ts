@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { authenticate } from "../../../middleWares/auth.middleware";
-import { IgnoreController } from "./ingore.controller";
+import { IgnoreController } from "./ignore.controller";
+import authenticate from "../../../middleWares/auth.middleware";
 
 const IgnoreRoutes = Router();
 

@@ -14,8 +14,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const http_status_codes_1 = require("http-status-codes");
 const AppError_1 = __importDefault(require("../helpers/AppError"));
-const token_utils_1 = require("../utils/token.utils");
-const user_cache_1 = require("../utils/user.cache");
+const token_utils_1 = require("./token.utils");
+const user_cache_1 = require("./user.cache");
 const user_model_1 = require("../app/modules/user/user.model");
 /**
  * authenticate middleware — 4 step flow:
