@@ -16,37 +16,29 @@ exports.authorize = void 0;
 const http_status_codes_1 = require("http-status-codes");
 const AppError_1 = __importDefault(require("../helpers/AppError"));
 const token_utils_1 = require("../utils/token.utils");
-const user_cache_1 = require("../utils/user.cache");
+const user_cache_1 = require("../app/modules/user/user.cache");
 const user_model_1 = require("../app/modules/user/user.model");
-/**
- * authenticate middleware — 4 step flow:
- *
- *  1. JWT signature + expiry verify
- *  2. Redis blacklist check (revoked tokens)
- *  3. Redis cache check → fresh user data (cache hit: ~1ms)
- *  4. Cache miss → DB query → populate cache (cache miss: ~5-10ms)
- *
- * Result: req.user ALWAYS has live data — subscription, role, isBlocked
- * are never stale regardless of when the JWT was issued.
- */
 const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c, _d, _e, _f;
     try {
-        // ── Step 1: Extract & verify JWT ─────────────────────────────────────
-        const authHeader = req.headers.authorization;
-        if (!(authHeader === null || authHeader === void 0 ? void 0 : authHeader.startsWith("Bearer "))) {
+        // ── Step 1: Token extract — cookie first, header fallback ─────────────
+        // Web clients use HttpOnly cookie, mobile clients use Authorization header
+        const token = ((_a = req.cookies) === null || _a === void 0 ? void 0 : _a.accessToken) ||
+            ((_b = req.headers.authorization) === null || _b === void 0 ? void 0 : _b.split(" ")[1]);
+        if (!token) {
             throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "No token provided");
         }
-        const token = authHeader.split(" ")[1];
-        const decoded = (0, token_utils_1.verifyAccessToken)(token); // throws if expired/invalid
-        // ── Step 2: Redis blacklist check (logout / revoked tokens) ──────────
-        const jti = token.split(".")[2]; // JWT signature as unique ID
+        // ── Step 2: JWT signature + expiry verify ────────────────────────────
+        const decoded = (0, token_utils_1.verifyAccessToken)(token); // throws if expired/tampered
+        // ── Step 3: Redis blacklist check (logout / revoked tokens) ──────────
+        const jti = token.split(".")[2]; // signature segment as unique ID
         const blacklisted = yield (0, token_utils_1.isAccessTokenBlacklisted)(jti);
         if (blacklisted) {
             throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Token has been revoked. Please login again");
         }
-        // ── Step 3: Try Redis cache first ────────────────────────────────────
+        // ── Step 4: Redis cache — fresh user data ────────────────────────────
         let freshUser = yield (0, user_cache_1.getCachedUser)(decoded.id);
-        // ── Step 4: Cache miss → hit DB, then warm cache ─────────────────────
+        // ── Step 5: Cache miss → DB query → warm cache ───────────────────────
         if (!freshUser) {
             const dbUser = yield user_model_1.User.findById(decoded.id)
                 .select("role isVerified isProfileCompleted subscription isBlocked isDeleted")
@@ -57,16 +49,15 @@ const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, func
             freshUser = {
                 _id: String(dbUser._id),
                 role: dbUser.role,
-                isVerified: dbUser.isVerified,
-                isProfileCompleted: dbUser.isProfileCompleted,
+                isVerified: (_c = dbUser.isVerified) !== null && _c !== void 0 ? _c : false,
+                isProfileCompleted: (_d = dbUser.isProfileCompleted) !== null && _d !== void 0 ? _d : false,
                 subscription: dbUser.subscription,
-                isBlocked: dbUser.isBlocked,
-                isDeleted: dbUser.isDeleted,
+                isBlocked: (_e = dbUser.isBlocked) !== null && _e !== void 0 ? _e : false,
+                isDeleted: (_f = dbUser.isDeleted) !== null && _f !== void 0 ? _f : false,
             };
-            // Warm the cache for subsequent requests
-            yield (0, user_cache_1.setCachedUser)(freshUser);
+            yield (0, user_cache_1.setCachedUser)(freshUser); // next request → cache hit (~1ms)
         }
-        // ── Step 5: Guard checks on fresh data ───────────────────────────────
+        // ── Step 6: Live status checks ───────────────────────────────────────
         if (freshUser.isDeleted) {
             throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Account no longer exists");
         }
@@ -76,7 +67,6 @@ const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, func
         if (!freshUser.isVerified) {
             throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Please verify your account first");
         }
-        // ── Step 6: Attach LIVE user data to request ──────────────────────────
         req.user = freshUser;
         next();
     }
