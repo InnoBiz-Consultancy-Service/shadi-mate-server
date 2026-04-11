@@ -14,14 +14,21 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.UserService = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const http_status_codes_1 = require("http-status-codes");
 const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const user_model_1 = require("./user.model");
-const envConfig_1 = require("../../../config/envConfig");
+const token_utils_1 = require("../../../utils/token.utils");
+const user_cache_1 = require("./user.cache");
 // ─── Helper: Generate 6-digit OTP ─────────────────────────────────────────────
 const generateOtp = () => Math.floor(100000 + Math.random() * 900000).toString();
 const OTP_EXPIRY_MINUTES = 5;
+// ─── Helper: Issue both tokens ────────────────────────────────────────────────
+const issueTokens = (user) => __awaiter(void 0, void 0, void 0, function* () {
+    const payload = (0, token_utils_1.buildTokenPayload)(user);
+    const accessToken = (0, token_utils_1.signAccessToken)(payload);
+    const refreshToken = yield (0, token_utils_1.signRefreshToken)(payload.id);
+    return { accessToken, refreshToken };
+});
 // ─── Register ─────────────────────────────────────────────────────────────────
 const registerUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     const { name, email, phone, password, gender } = payload;
@@ -43,13 +50,7 @@ const registerUser = (payload) => __awaiter(void 0, void 0, void 0, function* ()
         otp,
         expiresAt,
         purpose: "registration",
-        userData: {
-            name,
-            email,
-            phone,
-            password: hashedPassword,
-            gender,
-        },
+        userData: { name, email, phone, password: hashedPassword, gender },
     });
     return {
         message: "OTP sent successfully. Please verify your phone number.",
@@ -59,6 +60,7 @@ const registerUser = (payload) => __awaiter(void 0, void 0, void 0, function* ()
 });
 // ─── Verify OTP & Auto-login ─────────────────────────────────────────────────
 const verifyOtp = (payload) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     const { phone, otp } = payload;
     const otpDoc = yield user_model_1.Otp.findOne({ phone, purpose: "registration" });
     if (!otpDoc) {
@@ -72,21 +74,17 @@ const verifyOtp = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     }
     const user = yield user_model_1.User.create(Object.assign(Object.assign({}, otpDoc.userData), { isVerified: true }));
     yield user_model_1.Otp.deleteOne({ _id: otpDoc._id });
-    // ✅ subscription সহ token
-    const token = jsonwebtoken_1.default.sign({
-        id: user._id,
-        phone: user.phone,
-        email: user.email,
+    const { accessToken, refreshToken } = yield issueTokens({
+        _id: user._id,
         role: user.role,
         isVerified: user.isVerified,
-        isProfileCompleted: user.isProfileCompleted,
-        subscription: user.subscription, // ✅ added
-    }, envConfig_1.envVars.JWT_SECRET, {
-        expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN,
+        isProfileCompleted: (_a = user.isProfileCompleted) !== null && _a !== void 0 ? _a : false,
+        subscription: user.subscription,
     });
     return {
         message: "Phone verified successfully. Account created!",
-        token,
+        accessToken,
+        refreshToken,
         user: {
             _id: user._id,
             name: user.name,
@@ -115,6 +113,7 @@ const resendOtp = (phone) => __awaiter(void 0, void 0, void 0, function* () {
 });
 // ─── Login ────────────────────────────────────────────────────────────────────
 const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     const { identifier, password } = payload;
     const user = yield user_model_1.User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
@@ -131,21 +130,16 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
         if (!isMatch) {
             throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid credentials");
         }
-        // ✅ subscription সহ token
-        const token = jsonwebtoken_1.default.sign({
-            id: user._id,
-            phone: user.phone,
-            email: user.email,
+        const { accessToken, refreshToken } = yield issueTokens({
+            _id: user._id,
             role: user.role,
-            isProfileCompleted: user.isProfileCompleted,
             isVerified: user.isVerified,
-            subscription: user.subscription, // ✅ already here, keeping it
-        }, envConfig_1.envVars.JWT_SECRET, {
-            expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN,
+            isProfileCompleted: (_a = user.isProfileCompleted) !== null && _a !== void 0 ? _a : false,
+            subscription: user.subscription,
         });
-        return { message: "Login successful", token, user };
+        return { message: "Login successful", accessToken, refreshToken, user };
     }
-    // ─── Pending OTP user login ─────────────────────────────────────────────────
+    // ─── Pending OTP user ───────────────────────────────────────────────────
     const otpDoc = yield user_model_1.Otp.findOne({
         $or: [{ phone: identifier }, { "userData.email": identifier }],
         purpose: "registration",
@@ -160,20 +154,18 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
     if (!isMatch) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid credentials");
     }
-    const token = jsonwebtoken_1.default.sign({
-        phone: otpDoc.userData.phone,
-        email: otpDoc.userData.email,
+    // Pending users: short-lived access token only, no refresh token
+    const accessToken = (0, token_utils_1.signAccessToken)({
+        id: "pending",
         role: "user",
-        gender: otpDoc.userData.gender,
         isVerified: false,
-        subscription: "free", // pending user সবসময় free
-        pendingRegistration: true,
-    }, envConfig_1.envVars.JWT_SECRET, {
-        expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN,
+        isProfileCompleted: false,
+        subscription: "free",
     });
     return {
         message: "Login successful (pending verification)",
-        token,
+        accessToken,
+        refreshToken: null,
         user: {
             name: otpDoc.userData.name,
             email: otpDoc.userData.email,
@@ -184,8 +176,55 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
         },
     };
 });
+// ─── Refresh Access Token ─────────────────────────────────────────────────────
+const refreshAccessToken = (userId, refreshToken) => __awaiter(void 0, void 0, void 0, function* () {
+    const user = yield user_model_1.User.findById(userId).lean();
+    if (!user) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
+    }
+    if (user.isBlocked) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Your account has been blocked");
+    }
+    if (user.isDeleted) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Account no longer exists");
+    }
+    const isValid = yield (0, token_utils_1.verifyRefreshToken)(userId, refreshToken);
+    if (!isValid) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid or expired refresh token. Please login again");
+    }
+    const newRefreshToken = yield (0, token_utils_1.rotateRefreshToken)(userId);
+    // ✅ Fresh payload from DB — always up-to-date
+    const newAccessToken = (0, token_utils_1.signAccessToken)((0, token_utils_1.buildTokenPayload)(user));
+    return {
+        message: "Token refreshed successfully",
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+    };
+});
+// ─── Logout ───────────────────────────────────────────────────────────────────
+const logoutUser = (accessToken, userId) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const decoded = (0, token_utils_1.verifyAccessToken)(accessToken);
+        if (decoded.exp) {
+            const remainingTTL = decoded.exp - Math.floor(Date.now() / 1000);
+            if (remainingTTL > 0) {
+                const jti = accessToken.split(".")[2];
+                yield (0, token_utils_1.blacklistAccessToken)(jti, remainingTTL);
+            }
+        }
+    }
+    catch (_a) {
+        // Token already expired — no need to blacklist
+    }
+    yield Promise.all([
+        (0, token_utils_1.revokeRefreshToken)(userId),
+        (0, user_cache_1.invalidateUserCache)(userId), // ✅ Clear cache on logout
+    ]);
+    return { message: "Logged out successfully" };
+});
 // ─── Reset Password ───────────────────────────────────────────────────────────
 const resetPassword = (payload) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     const { identifier, oldPassword, newPassword } = payload;
     const user = yield user_model_1.User.findOne({
         $or: [{ phone: identifier }, { email: identifier }],
@@ -204,21 +243,23 @@ const resetPassword = (payload) => __awaiter(void 0, void 0, void 0, function* (
     if (!isOldPasswordMatch) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Current password is incorrect");
     }
-    const hashedNewPassword = yield bcryptjs_1.default.hash(newPassword, 12);
-    user.password = hashedNewPassword;
+    user.password = yield bcryptjs_1.default.hash(newPassword, 12);
     yield user.save();
-    const token = jsonwebtoken_1.default.sign({
-        id: user._id,
-        phone: user.phone,
-        email: user.email,
+    yield Promise.all([
+        (0, token_utils_1.revokeRefreshToken)(String(user._id)),
+        (0, user_cache_1.invalidateUserCache)(String(user._id)), // ✅ Clear cache
+    ]);
+    const { accessToken, refreshToken } = yield issueTokens({
+        _id: user._id,
         role: user.role,
-        isProfileCompleted: user.isProfileCompleted,
         isVerified: user.isVerified,
-        subscription: user.subscription, // ✅ added
-    }, envConfig_1.envVars.JWT_SECRET, { expiresIn: envConfig_1.envVars.JWT_EXPIRES_IN });
+        isProfileCompleted: (_a = user.isProfileCompleted) !== null && _a !== void 0 ? _a : false,
+        subscription: user.subscription,
+    });
     return {
-        message: "Password changed successfully. Please login with your new password.",
-        token,
+        message: "Password changed successfully.",
+        accessToken,
+        refreshToken,
         user: {
             _id: user._id,
             name: user.name,
@@ -237,10 +278,16 @@ const getMe = (userId) => __awaiter(void 0, void 0, void 0, function* () {
 });
 // ─── Update User ──────────────────────────────────────────────────────────────
 const updateUser = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
-    const user = yield user_model_1.User.findByIdAndUpdate(userId, payload, { new: true, runValidators: true }).lean();
+    const user = yield user_model_1.User.findByIdAndUpdate(userId, payload, {
+        new: true,
+        runValidators: true,
+    }).lean();
     if (!user) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
     }
+    // ✅ Any profile update → invalidate cache
+    // e.g. isProfileCompleted true হলে সাথে সাথে reflect হবে
+    yield (0, user_cache_1.invalidateUserCache)(userId);
     return user;
 });
 // ─── Delete User (Soft Delete) ───────────────────────────────────────────────
@@ -252,6 +299,11 @@ const deleteUser = (userId, requestUser) => __awaiter(void 0, void 0, void 0, fu
     if (!user) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
     }
+    // ✅ Delete করলে তাৎক্ষণিক সব session শেষ
+    yield Promise.all([
+        (0, token_utils_1.revokeRefreshToken)(userId),
+        (0, user_cache_1.invalidateUserCache)(userId),
+    ]);
     return user;
 });
 // ─── Update Block Status ──────────────────────────────────────────────────────
@@ -263,6 +315,24 @@ const updateBlockStatus = (userId, isBlocked, requestUser) => __awaiter(void 0, 
     if (!user) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
     }
+    // ✅ Block হলে তাৎক্ষণিক পরের request-এই reject হবে
+    yield Promise.all([
+        (0, user_cache_1.invalidateUserCache)(userId),
+        ...(isBlocked ? [(0, token_utils_1.revokeRefreshToken)(userId)] : []),
+    ]);
+    return user;
+});
+// ─── Update Subscription ──────────────────────────────────────────────────────
+// ✅ এই service টা payment/subscription module থেকে call করতে হবে
+// যখনই subscription পরিবর্তন হবে — premium কেনা, cancel, expire
+const updateSubscription = (userId, subscription) => __awaiter(void 0, void 0, void 0, function* () {
+    const user = yield user_model_1.User.findByIdAndUpdate(userId, { subscription }, { new: true }).lean();
+    if (!user) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
+    }
+    // ✅ Cache invalidate — পরের request থেকেই নতুন subscription দেখাবে
+    // কোনো re-login লাগবে না
+    yield (0, user_cache_1.invalidateUserCache)(userId);
     return user;
 });
 // ─── Forgot Password ──────────────────────────────────────────────────────────
@@ -294,7 +364,10 @@ const verifyResetOtp = (payload) => __awaiter(void 0, void 0, void 0, function* 
     if (!user) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "No verified account found");
     }
-    const otpDoc = yield user_model_1.Otp.findOne({ phone: user.phone, purpose: "forgot-password" });
+    const otpDoc = yield user_model_1.Otp.findOne({
+        phone: user.phone,
+        purpose: "forgot-password",
+    });
     if (!otpDoc) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "No reset request found");
     }
@@ -304,11 +377,15 @@ const verifyResetOtp = (payload) => __awaiter(void 0, void 0, void 0, function* 
     if (otpDoc.otp !== otp) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid OTP");
     }
-    const hashedPassword = yield bcryptjs_1.default.hash(newPassword, 12);
-    user.password = hashedPassword;
+    user.password = yield bcryptjs_1.default.hash(newPassword, 12);
     yield user.save();
     yield user_model_1.Otp.deleteOne({ _id: otpDoc._id });
-    return { message: "Password reset successful" };
+    // ✅ সব session revoke + cache clear
+    yield Promise.all([
+        (0, token_utils_1.revokeRefreshToken)(String(user._id)),
+        (0, user_cache_1.invalidateUserCache)(String(user._id)),
+    ]);
+    return { message: "Password reset successful. Please login again." };
 });
 // ─── Exports ──────────────────────────────────────────────────────────────────
 exports.UserService = {
@@ -316,9 +393,12 @@ exports.UserService = {
     verifyOtp,
     resendOtp,
     loginUser,
+    refreshAccessToken,
+    logoutUser,
     resetPassword,
     getMe,
     updateUser,
+    updateSubscription,
     deleteUser,
     updateBlockStatus,
     forgotPassword,

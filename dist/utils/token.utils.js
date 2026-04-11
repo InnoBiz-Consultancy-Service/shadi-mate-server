@@ -18,8 +18,8 @@ const crypto_1 = __importDefault(require("crypto"));
 const redis_1 = __importDefault(require("./redis"));
 const envConfig_1 = require("../config/envConfig");
 // ─── Constants ────────────────────────────────────────────────────────────────
-exports.ACCESS_TOKEN_EXPIRY = "15m";
-exports.REFRESH_TOKEN_EXPIRY_SECONDS = 7 * 24 * 60 * 60; // 7 days in seconds
+exports.ACCESS_TOKEN_EXPIRY = "2d";
+exports.REFRESH_TOKEN_EXPIRY_SECONDS = 30 * 24 * 60 * 60; // 30 days in seconds
 // Redis key prefixes
 const REFRESH_TOKEN_PREFIX = "refresh:";
 const BLACKLIST_PREFIX = "blacklist:";

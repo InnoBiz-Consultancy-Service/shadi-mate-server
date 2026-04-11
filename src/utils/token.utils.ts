@@ -4,8 +4,8 @@ import redisClient from "./redis";
 import { envVars } from "../config/envConfig";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-export const ACCESS_TOKEN_EXPIRY = "15m";
-export const REFRESH_TOKEN_EXPIRY_SECONDS = 7 * 24 * 60 * 60; // 7 days in seconds
+export const ACCESS_TOKEN_EXPIRY = "2d";
+export const REFRESH_TOKEN_EXPIRY_SECONDS = 30 * 24 * 60 * 60; // 30 days in seconds
 
 // Redis key prefixes
 const REFRESH_TOKEN_PREFIX = "refresh:";

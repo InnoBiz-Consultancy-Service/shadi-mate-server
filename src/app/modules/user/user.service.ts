@@ -1,17 +1,45 @@
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import { StatusCodes } from "http-status-codes";
 import AppError from "../../../helpers/AppError";
 import { User, Otp } from "./user.model";
 import { IUser } from "./user.interface";
-import { TRegisterInput, TVerifyOtpInput, TLoginInput, TResetPasswordInput } from "./user.validation";
-import { envVars } from "../../../config/envConfig";
+import {
+    TRegisterInput,
+    TVerifyOtpInput,
+    TLoginInput,
+    TResetPasswordInput,
+} from "./user.validation";
+import {
+    buildTokenPayload,
+    signAccessToken,
+    signRefreshToken,
+    verifyRefreshToken,
+    rotateRefreshToken,
+    revokeRefreshToken,
+    blacklistAccessToken,
+    verifyAccessToken,
+} from "../../../utils/token.utils";
+import { invalidateUserCache } from "./user.cache";
 
 // ─── Helper: Generate 6-digit OTP ─────────────────────────────────────────────
 const generateOtp = (): string =>
     Math.floor(100000 + Math.random() * 900000).toString();
 
 const OTP_EXPIRY_MINUTES = 5;
+
+// ─── Helper: Issue both tokens ────────────────────────────────────────────────
+const issueTokens = async (user: {
+    _id: unknown;
+    role: string;
+    isVerified: boolean;
+    isProfileCompleted: boolean;
+    subscription: string;
+}) => {
+    const payload = buildTokenPayload(user);
+    const accessToken = signAccessToken(payload);
+    const refreshToken = await signRefreshToken(payload.id);
+    return { accessToken, refreshToken };
+};
 
 // ─── Register ─────────────────────────────────────────────────────────────────
 const registerUser = async (payload: TRegisterInput) => {
@@ -42,13 +70,7 @@ const registerUser = async (payload: TRegisterInput) => {
         otp,
         expiresAt,
         purpose: "registration",
-        userData: {
-            name,
-            email,
-            phone,
-            password: hashedPassword,
-            gender,
-        },
+        userData: { name, email, phone, password: hashedPassword, gender },
     });
 
     return {
@@ -79,33 +101,21 @@ const verifyOtp = async (payload: TVerifyOtpInput) => {
         throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid OTP");
     }
 
-    const user = await User.create({
-        ...otpDoc.userData,
-        isVerified: true,
-    });
-
+    const user = await User.create({ ...otpDoc.userData, isVerified: true });
     await Otp.deleteOne({ _id: otpDoc._id });
 
-    // ✅ subscription সহ token
-    const token = jwt.sign(
-        {
-            id: user._id,
-            phone: user.phone,
-            email: user.email,
-            role: user.role,
-            isVerified: user.isVerified,
-            isProfileCompleted: user.isProfileCompleted,
-            subscription: user.subscription, // ✅ added
-        },
-        envVars.JWT_SECRET as string,
-        {
-            expiresIn: envVars.JWT_EXPIRES_IN as `${number}${"s" | "m" | "h" | "d"}`,
-        }
-    );
+    const { accessToken, refreshToken } = await issueTokens({
+        _id: user._id,
+        role: user.role,
+        isVerified: user.isVerified,
+        isProfileCompleted: user.isProfileCompleted ?? false,
+        subscription: user.subscription,
+    });
 
     return {
         message: "Phone verified successfully. Account created!",
-        token,
+        accessToken,
+        refreshToken,
         user: {
             _id: user._id,
             name: user.name,
@@ -168,27 +178,18 @@ const loginUser = async (payload: TLoginInput) => {
             throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid credentials");
         }
 
-        // ✅ subscription সহ token
-        const token = jwt.sign(
-            {
-                id: user._id,
-                phone: user.phone,
-                email: user.email,
-                role: user.role,
-                isProfileCompleted: user.isProfileCompleted,
-                isVerified: user.isVerified,
-                subscription: user.subscription, // ✅ already here, keeping it
-            },
-            envVars.JWT_SECRET as string,
-            {
-                expiresIn: envVars.JWT_EXPIRES_IN as `${number}${"s" | "m" | "h" | "d"}`,
-            }
-        );
+        const { accessToken, refreshToken } = await issueTokens({
+            _id: user._id,
+            role: user.role,
+            isVerified: user.isVerified,
+            isProfileCompleted: user.isProfileCompleted ?? false,
+            subscription: user.subscription,
+        });
 
-        return { message: "Login successful", token, user };
+        return { message: "Login successful", accessToken, refreshToken, user };
     }
 
-    // ─── Pending OTP user login ─────────────────────────────────────────────────
+    // ─── Pending OTP user ───────────────────────────────────────────────────
     const otpDoc = await Otp.findOne({
         $or: [{ phone: identifier }, { "userData.email": identifier }],
         purpose: "registration",
@@ -208,25 +209,19 @@ const loginUser = async (payload: TLoginInput) => {
         throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid credentials");
     }
 
-    const token = jwt.sign(
-        {
-            phone: otpDoc.userData.phone,
-            email: otpDoc.userData.email,
-            role: "user",
-            gender: otpDoc.userData.gender,
-            isVerified: false,
-            subscription: "free", // pending user সবসময় free
-            pendingRegistration: true,
-        },
-        envVars.JWT_SECRET as string,
-        {
-            expiresIn: envVars.JWT_EXPIRES_IN as `${number}${"s" | "m" | "h" | "d"}`,
-        }
-    );
+    // Pending users: short-lived access token only, no refresh token
+    const accessToken = signAccessToken({
+        id: "pending",
+        role: "user",
+        isVerified: false,
+        isProfileCompleted: false,
+        subscription: "free",
+    });
 
     return {
         message: "Login successful (pending verification)",
-        token,
+        accessToken,
+        refreshToken: null,
         user: {
             name: otpDoc.userData.name,
             email: otpDoc.userData.email,
@@ -236,6 +231,67 @@ const loginUser = async (payload: TLoginInput) => {
             subscription: "free",
         },
     };
+};
+
+// ─── Refresh Access Token ─────────────────────────────────────────────────────
+const refreshAccessToken = async (userId: string, refreshToken: string) => {
+    const user = await User.findById(userId).lean();
+
+    if (!user) {
+        throw new AppError(StatusCodes.NOT_FOUND, "User not found");
+    }
+
+    if ((user as any).isBlocked) {
+        throw new AppError(StatusCodes.FORBIDDEN, "Your account has been blocked");
+    }
+
+    if ((user as any).isDeleted) {
+        throw new AppError(StatusCodes.FORBIDDEN, "Account no longer exists");
+    }
+
+    const isValid = await verifyRefreshToken(userId, refreshToken);
+
+    if (!isValid) {
+        throw new AppError(
+            StatusCodes.UNAUTHORIZED,
+            "Invalid or expired refresh token. Please login again"
+        );
+    }
+
+    const newRefreshToken = await rotateRefreshToken(userId);
+
+    // ✅ Fresh payload from DB — always up-to-date
+    const newAccessToken = signAccessToken(buildTokenPayload(user as any));
+
+    return {
+        message: "Token refreshed successfully",
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+    };
+};
+
+// ─── Logout ───────────────────────────────────────────────────────────────────
+const logoutUser = async (accessToken: string, userId: string) => {
+    try {
+        const decoded = verifyAccessToken(accessToken);
+
+        if (decoded.exp) {
+            const remainingTTL = decoded.exp - Math.floor(Date.now() / 1000);
+            if (remainingTTL > 0) {
+                const jti = accessToken.split(".")[2];
+                await blacklistAccessToken(jti, remainingTTL);
+            }
+        }
+    } catch {
+        // Token already expired — no need to blacklist
+    }
+
+    await Promise.all([
+        revokeRefreshToken(userId),
+        invalidateUserCache(userId), // ✅ Clear cache on logout
+    ]);
+
+    return { message: "Logged out successfully" };
 };
 
 // ─── Reset Password ───────────────────────────────────────────────────────────
@@ -265,27 +321,26 @@ const resetPassword = async (payload: TResetPasswordInput) => {
         throw new AppError(StatusCodes.UNAUTHORIZED, "Current password is incorrect");
     }
 
-    const hashedNewPassword = await bcrypt.hash(newPassword, 12);
-    user.password = hashedNewPassword;
+    user.password = await bcrypt.hash(newPassword, 12);
     await user.save();
 
-    const token = jwt.sign(
-        {
-            id: user._id,
-            phone: user.phone,
-            email: user.email,
-            role: user.role,
-            isProfileCompleted: user.isProfileCompleted,
-            isVerified: user.isVerified,
-            subscription: user.subscription, // ✅ added
-        },
-        envVars.JWT_SECRET,
-        { expiresIn: envVars.JWT_EXPIRES_IN as `${number}${"s" | "m" | "h" | "d"}` }
-    );
+    await Promise.all([
+        revokeRefreshToken(String(user._id)),
+        invalidateUserCache(String(user._id)), // ✅ Clear cache
+    ]);
+
+    const { accessToken, refreshToken } = await issueTokens({
+        _id: user._id,
+        role: user.role,
+        isVerified: user.isVerified,
+        isProfileCompleted: user.isProfileCompleted ?? false,
+        subscription: user.subscription,
+    });
 
     return {
-        message: "Password changed successfully. Please login with your new password.",
-        token,
+        message: "Password changed successfully.",
+        accessToken,
+        refreshToken,
         user: {
             _id: user._id,
             name: user.name,
@@ -306,20 +361,27 @@ const getMe = async (userId: string) => {
 
 // ─── Update User ──────────────────────────────────────────────────────────────
 const updateUser = async (userId: string, payload: Partial<IUser>) => {
-    const user = await User.findByIdAndUpdate(
-        userId,
-        payload,
-        { new: true, runValidators: true }
-    ).lean();
+    const user = await User.findByIdAndUpdate(userId, payload, {
+        new: true,
+        runValidators: true,
+    }).lean();
 
     if (!user) {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
+
+    // ✅ Any profile update → invalidate cache
+    // e.g. isProfileCompleted true হলে সাথে সাথে reflect হবে
+    await invalidateUserCache(userId);
+
     return user;
 };
 
 // ─── Delete User (Soft Delete) ───────────────────────────────────────────────
-const deleteUser = async (userId: string, requestUser: { id: string; role: string }) => {
+const deleteUser = async (
+    userId: string,
+    requestUser: { id: string; role: string }
+) => {
     if (requestUser.role !== "admin" && requestUser.id !== userId) {
         throw new AppError(StatusCodes.FORBIDDEN, "You can only delete your own account");
     }
@@ -333,11 +395,22 @@ const deleteUser = async (userId: string, requestUser: { id: string; role: strin
     if (!user) {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
+
+    // ✅ Delete করলে তাৎক্ষণিক সব session শেষ
+    await Promise.all([
+        revokeRefreshToken(userId),
+        invalidateUserCache(userId),
+    ]);
+
     return user;
 };
 
 // ─── Update Block Status ──────────────────────────────────────────────────────
-const updateBlockStatus = async (userId: string, isBlocked: boolean, requestUser: { id: string; role: string }) => {
+const updateBlockStatus = async (
+    userId: string,
+    isBlocked: boolean,
+    requestUser: { id: string; role: string }
+) => {
     if (requestUser.role !== "admin") {
         throw new AppError(StatusCodes.FORBIDDEN, "Only admins can block/unblock users");
     }
@@ -351,6 +424,34 @@ const updateBlockStatus = async (userId: string, isBlocked: boolean, requestUser
     if (!user) {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
+
+    // ✅ Block হলে তাৎক্ষণিক পরের request-এই reject হবে
+    await Promise.all([
+        invalidateUserCache(userId),
+        ...(isBlocked ? [revokeRefreshToken(userId)] : []),
+    ]);
+
+    return user;
+};
+
+// ─── Update Subscription ──────────────────────────────────────────────────────
+// ✅ এই service টা payment/subscription module থেকে call করতে হবে
+// যখনই subscription পরিবর্তন হবে — premium কেনা, cancel, expire
+const updateSubscription = async (userId: string, subscription: string) => {
+    const user = await User.findByIdAndUpdate(
+        userId,
+        { subscription },
+        { new: true }
+    ).lean();
+
+    if (!user) {
+        throw new AppError(StatusCodes.NOT_FOUND, "User not found");
+    }
+
+    // ✅ Cache invalidate — পরের request থেকেই নতুন subscription দেখাবে
+    // কোনো re-login লাগবে না
+    await invalidateUserCache(userId);
+
     return user;
 };
 
@@ -363,7 +464,10 @@ const forgotPassword = async (identifier: string) => {
     });
 
     if (!user) {
-        throw new AppError(StatusCodes.NOT_FOUND, "No verified account found with this phone/email");
+        throw new AppError(
+            StatusCodes.NOT_FOUND,
+            "No verified account found with this phone/email"
+        );
     }
 
     if (user.isBlocked) {
@@ -400,7 +504,10 @@ const verifyResetOtp = async (payload: {
         throw new AppError(StatusCodes.NOT_FOUND, "No verified account found");
     }
 
-    const otpDoc = await Otp.findOne({ phone: user.phone, purpose: "forgot-password" });
+    const otpDoc = await Otp.findOne({
+        phone: user.phone,
+        purpose: "forgot-password",
+    });
 
     if (!otpDoc) {
         throw new AppError(StatusCodes.NOT_FOUND, "No reset request found");
@@ -414,13 +521,17 @@ const verifyResetOtp = async (payload: {
         throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid OTP");
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 12);
-    user.password = hashedPassword;
+    user.password = await bcrypt.hash(newPassword, 12);
     await user.save();
-
     await Otp.deleteOne({ _id: otpDoc._id });
 
-    return { message: "Password reset successful" };
+    // ✅ সব session revoke + cache clear
+    await Promise.all([
+        revokeRefreshToken(String(user._id)),
+        invalidateUserCache(String(user._id)),
+    ]);
+
+    return { message: "Password reset successful. Please login again." };
 };
 
 // ─── Exports ──────────────────────────────────────────────────────────────────
@@ -429,9 +540,12 @@ export const UserService = {
     verifyOtp,
     resendOtp,
     loginUser,
+    refreshAccessToken,
+    logoutUser,
     resetPassword,
     getMe,
     updateUser,
+    updateSubscription,
     deleteUser,
     updateBlockStatus,
     forgotPassword,
