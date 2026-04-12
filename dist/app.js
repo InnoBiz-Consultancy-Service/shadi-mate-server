@@ -9,10 +9,11 @@ const globalErrorHandler_1 = require("./middleWares/globalErrorHandler");
 const notFound_1 = require("./middleWares/notFound");
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const index_1 = require("./app/routes/index ");
+const envConfig_1 = require("./config/envConfig");
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 app.use((0, cors_1.default)({
-    origin: "https://shadimate-client.vercel.app",
+    origin: envConfig_1.envVars.FRONTEND_URL,
     credentials: true
 }));
 app.use((0, cookie_parser_1.default)());

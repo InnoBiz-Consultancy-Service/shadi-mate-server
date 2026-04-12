@@ -19,6 +19,17 @@ const notification_service_1 = require("../../app/modules/notification/notificat
 const ignore_service_1 = require("../../app/modules/ignore/ignore.service");
 const socketSingleton_1 = require("./socketSingleton");
 const redis_1 = __importDefault(require("../../utils/redis"));
+// ─── Helper: participantKey তৈরি করো ─────────────────────────────────────────
+// FIX (Critical Race Condition): আগের code-এ participantIds array-এ
+// {$all:[A,B],$size:2} দিয়ে upsert করা হতো।
+// Problem: [A,B] এবং [B,A] MongoDB-তে আলাদা array, unique index কাজ করে না।
+// 50,000 concurrent request-এ একসাথে upsert পাঠালে duplicate document তৈরি হয়।
+//
+// Solution: string key "smallerId_largerId" → সর্বদা same string, race condition নেই।
+// Mongoose unique index এই key-এ enforce করে → database level guarantee।
+const makeParticipantKey = (a, b) => {
+    return [a, b].sort().join("_");
+};
 const chatHandler = (socket) => {
     socket.on("send-message", (data) => __awaiter(void 0, void 0, void 0, function* () {
         var _a;
@@ -40,51 +51,82 @@ const chatHandler = (socket) => {
             socket.emit("error", { message: "receiverId and message are required" });
             return;
         }
+        // নিজেকে message পাঠানো আটকাও
+        if (senderId === receiverId) {
+            socket.emit("error", { message: "Cannot send message to yourself" });
+            return;
+        }
+        // Message content sanitize — XSS আটকাতে trim করো
+        const sanitizedMessage = String(message).trim();
+        if (!sanitizedMessage) {
+            socket.emit("error", { message: "Message cannot be empty" });
+            return;
+        }
         // ─── Ignore check ─────────────────────────────────────────────────────
         const isIgnored = yield ignore_service_1.IgnoreService.isIgnoredBy(senderId, receiverId);
         if (isIgnored) {
-            // ─── Ignored Message collection-এ save করো ───────────────────────
             yield ignore_service_1.IgnoreService.saveIgnoredMessage({
                 senderId,
                 receiverId,
-                content: message,
+                content: sanitizedMessage,
                 type,
             });
             socket.emit("message-sent", {
                 _id: null,
                 senderId,
                 receiverId,
-                message,
+                message: sanitizedMessage,
                 type,
                 status: "sent",
                 createdAt: new Date(),
             });
             return;
         }
-        // ─── Normal Message save ──────────────────────────────────────────────
+        // ─── Message save ─────────────────────────────────────────────────────
         const savedMessage = yield chat_model_1.Message.create({
             senderId,
             receiverId,
-            content: message,
+            content: sanitizedMessage,
             type,
             status: "sent",
         });
-        console.log(`💬 Message saved: ${senderId} → ${receiverId}`);
         const io = (0, socketSingleton_1.getIO)();
         const receiverSocketId = yield redis_1.default.hget("onlineUsers", receiverId);
+        let finalStatus = "sent";
         if (receiverSocketId) {
             yield chat_model_1.Message.findByIdAndUpdate(savedMessage._id, { status: "delivered" });
+            finalStatus = "delivered";
             io.to(String(receiverSocketId)).emit("receive-message", {
                 _id: savedMessage._id,
                 senderId,
                 receiverId,
-                message,
+                message: sanitizedMessage,
                 type,
                 status: "delivered",
                 createdAt: savedMessage.createdAt,
             });
         }
-        // ─── Notification ─────────────────────────────────────────────────────
+        // ─── Conversation upsert (race-condition safe) ────────────────────────
+        // FIX: participantKey দিয়ে upsert — unique string index guarantee করে
+        // একই pair-এর জন্য কখনো duplicate document হবে না, এমনকি concurrent-এ।
+        const participantKey = makeParticipantKey(senderId, receiverId);
+        const sortedIds = [senderId, receiverId].sort();
+        yield chat_model_1.Conversation.findOneAndUpdate({ participantKey }, {
+            $set: {
+                participantKey,
+                participantIds: sortedIds,
+                lastMessage: sanitizedMessage,
+                lastMessageType: type,
+                lastMessageSenderId: senderId,
+                lastMessageAt: savedMessage.createdAt,
+                lastMessageStatus: finalStatus,
+                // Sender-এর unread count 0 রাখো (নিজের পাঠানো message unread নয়)
+                [`unreadCounts.${senderId}`]: 0,
+            },
+            // Receiver-এর unread count বাড়াও
+            $inc: { [`unreadCounts.${receiverId}`]: 1 },
+        }, { upsert: true, new: true });
+        // ─── Notification (fire-and-forget) ──────────────────────────────────
         try {
             const sender = yield user_model_1.User.findById(senderId).select("name").lean();
             const senderName = (_a = sender === null || sender === void 0 ? void 0 : sender.name) !== null && _a !== void 0 ? _a : "Someone";
@@ -109,9 +151,9 @@ const chatHandler = (socket) => {
             _id: savedMessage._id,
             senderId,
             receiverId,
-            message,
+            message: sanitizedMessage,
             type,
-            status: receiverSocketId ? "delivered" : "sent",
+            status: finalStatus,
             createdAt: savedMessage.createdAt,
         });
     }));

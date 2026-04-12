@@ -5,13 +5,14 @@ import { notFoundHandler } from "./middleWares/notFound";
 import cookieParser from "cookie-parser";
 
 import { router } from "./app/routes/index ";
+import { envVars } from "./config/envConfig";
 
 const app = express()
 
 app.use(express.json())
 
 app.use(cors({
-    origin: "https://shadimate-client.vercel.app",
+    origin: envVars.FRONTEND_URL,
     credentials:true
 }))
 

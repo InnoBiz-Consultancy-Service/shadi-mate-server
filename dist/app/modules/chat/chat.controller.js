@@ -8,42 +8,65 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getConversationList = exports.getChatHistory = void 0;
 const mongoose_1 = require("mongoose");
 const chat_model_1 = require("./chat.model");
 const catchAsync_1 = require("../../../utils/catchAsync");
 const sendResponse_1 = require("../../../utils/sendResponse");
+const AppError_1 = __importDefault(require("../../../helpers/AppError"));
+const http_status_codes_1 = require("http-status-codes");
+// ─── Helper ───────────────────────────────────────────────────────────────────
+const isValidObjectId = (id) => mongoose_1.Types.ObjectId.isValid(id);
 // ─── GET /api/v1/chat/:userId ─────────────────────────────────────────────────
 exports.getChatHistory = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const user = req.user;
-    const myId = new mongoose_1.Types.ObjectId(user.id);
-    const otherUserId = new mongoose_1.Types.ObjectId(req.params.userId);
-    if (user.subscription !== "premium") {
-        return (0, sendResponse_1.sendResponse)(res, {
-            statusCode: 403,
-            success: false,
-            message: "Upgrade to premium to view chat history",
-        });
+    if (!isValidObjectId(req.params.userId)) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Invalid user ID");
     }
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    if (user.subscription !== "premium") {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Upgrade to premium to view chat history");
+    }
+    const myId = new mongoose_1.Types.ObjectId(user.id);
+    const otherId = new mongoose_1.Types.ObjectId(req.params.userId);
+    if (myId.equals(otherId)) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Cannot chat with yourself");
+    }
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
     const skip = (page - 1) * limit;
     const filter = {
         $or: [
-            { senderId: myId, receiverId: otherUserId },
-            { senderId: otherUserId, receiverId: myId },
+            { senderId: myId, receiverId: otherId },
+            { senderId: otherId, receiverId: myId },
         ],
     };
     const [messages, total] = yield Promise.all([
-        chat_model_1.Message.find(filter)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean(),
+        chat_model_1.Message.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
         chat_model_1.Message.countDocuments(filter),
     ]);
-    yield chat_model_1.Message.updateMany({ senderId: otherUserId, receiverId: myId, status: { $ne: "seen" } }, { status: "seen" });
+    // ── Mark as seen + Conversation sync ─────────────────────────────────────
+    // getChatHistory খুললে মানে user conversation দেখছে → সব seen হওয়া উচিত
+    const participantKey = [user.id, otherId.toString()].sort().join("_");
+    yield Promise.all([
+        // Message collection-এ সব pending message seen করো
+        chat_model_1.Message.updateMany({ senderId: otherId, receiverId: myId, status: { $ne: "seen" } }, { status: "seen" }),
+        // Conversation-এ unread count reset + lastMessageStatus sync
+        // Bug fix: আগে শুধু unreadCount reset হতো, lastMessageStatus "seen" হতো না
+        chat_model_1.Conversation.updateOne({
+            participantKey,
+            // শুধু তখনই seen করো যখন last message অন্যজনের পাঠানো
+            lastMessageSenderId: otherId,
+        }, {
+            $set: {
+                lastMessageStatus: "seen",
+                [`unreadCounts.${user.id}`]: 0,
+            },
+        }),
+    ]);
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: 200,
         success: true,
@@ -57,72 +80,25 @@ exports.getConversationList = (0, catchAsync_1.catchAsync)((req, res) => __await
     const user = req.user;
     const myId = new mongoose_1.Types.ObjectId(user.id);
     const isPremium = user.subscription === "premium";
-    const conversations = yield chat_model_1.Message.aggregate([
-        {
-            $match: {
-                $or: [{ senderId: myId }, { receiverId: myId }],
-            },
-        },
-        { $sort: { createdAt: -1 } },
-        {
-            $addFields: {
-                otherUser: {
-                    $cond: [{ $eq: ["$senderId", myId] }, "$receiverId", "$senderId"],
-                },
-            },
-        },
-        {
-            $group: {
-                _id: "$otherUser",
-                lastMessage: { $first: "$content" },
-                lastMessageType: { $first: "$type" },
-                lastMessageTime: { $first: "$createdAt" },
-                status: { $first: "$status" },
-                unreadCount: {
-                    $sum: {
-                        $cond: [
-                            {
-                                $and: [
-                                    { $eq: ["$receiverId", myId] },
-                                    { $ne: ["$status", "seen"] },
-                                ],
-                            },
-                            1,
-                            0,
-                        ],
-                    },
-                },
-            },
-        },
-        {
-            $lookup: {
-                from: "users",
-                localField: "_id",
-                foreignField: "_id",
-                as: "userInfo",
-            },
-        },
-        { $unwind: { path: "$userInfo", preserveNullAndEmptyArrays: true } },
-        {
-            $project: {
-                _id: 0,
-                userId: "$_id",
-                name: "$userInfo.name",
-                avatar: "$userInfo.avatar",
-                lastMessage: 1,
-                lastMessageType: 1,
-                lastMessageTime: 1,
-                status: 1,
-                unreadCount: 1,
-            },
-        },
-        { $sort: { lastMessageTime: -1 } },
-    ]);
+    const conversations = yield chat_model_1.Conversation.find({ participantIds: myId })
+        .sort({ lastMessageAt: -1 })
+        .populate("participantIds", "name avatar")
+        .lean();
     const result = conversations.map((conv) => {
+        var _a, _b, _c, _d, _e;
+        const otherUser = conv.participantIds.find((p) => { var _a; return ((_a = p === null || p === void 0 ? void 0 : p._id) === null || _a === void 0 ? void 0 : _a.toString()) !== user.id; });
+        const unreadCount = (_b = (_a = conv.unreadCounts) === null || _a === void 0 ? void 0 : _a[user.id]) !== null && _b !== void 0 ? _b : 0;
+        const base = {
+            userId: (_c = otherUser === null || otherUser === void 0 ? void 0 : otherUser._id) !== null && _c !== void 0 ? _c : null,
+            name: (_d = otherUser === null || otherUser === void 0 ? void 0 : otherUser.name) !== null && _d !== void 0 ? _d : null,
+            avatar: (_e = otherUser === null || otherUser === void 0 ? void 0 : otherUser.avatar) !== null && _e !== void 0 ? _e : null,
+            lastMessageTime: conv.lastMessageAt,
+            unreadCount,
+        };
         if (!isPremium) {
-            return Object.assign(Object.assign({}, conv), { lastMessage: null, lastMessageType: null, isLocked: true });
+            return Object.assign(Object.assign({}, base), { lastMessage: null, lastMessageType: null, isLocked: true });
         }
-        return Object.assign(Object.assign({}, conv), { isLocked: false });
+        return Object.assign(Object.assign({}, base), { lastMessage: conv.lastMessage, lastMessageType: conv.lastMessageType, status: conv.lastMessageStatus, isLocked: false });
     });
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: 200,

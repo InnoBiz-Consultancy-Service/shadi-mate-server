@@ -1,47 +1,75 @@
 import { Request, Response } from "express";
 import { Types } from "mongoose";
-import { Message } from "./chat.model";
+import { Message, Conversation } from "./chat.model";
 import { catchAsync } from "../../../utils/catchAsync";
 import { sendResponse } from "../../../utils/sendResponse";
+import AppError from "../../../helpers/AppError";
+import { StatusCodes } from "http-status-codes";
+
+// ─── Helper ───────────────────────────────────────────────────────────────────
+const isValidObjectId = (id: string): boolean => Types.ObjectId.isValid(id);
 
 // ─── GET /api/v1/chat/:userId ─────────────────────────────────────────────────
 export const getChatHistory = catchAsync(async (req: Request, res: Response) => {
     const user = (req as any).user;
-    const myId = new Types.ObjectId(user.id);
-    const otherUserId = new Types.ObjectId(req.params.userId);
 
-    if (user.subscription !== "premium") {
-        return sendResponse(res, {
-            statusCode: 403,
-            success: false,
-            message: "Upgrade to premium to view chat history",
-        });
+    if (!isValidObjectId(req.params.userId)) {
+        throw new AppError(StatusCodes.BAD_REQUEST, "Invalid user ID");
     }
 
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const skip = (page - 1) * limit;
+    if (user.subscription !== "premium") {
+        throw new AppError(StatusCodes.FORBIDDEN, "Upgrade to premium to view chat history");
+    }
+
+    const myId    = new Types.ObjectId(user.id);
+    const otherId = new Types.ObjectId(req.params.userId);
+
+    if (myId.equals(otherId)) {
+        throw new AppError(StatusCodes.BAD_REQUEST, "Cannot chat with yourself");
+    }
+
+    const page  = Math.max(1, parseInt(req.query.page  as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const skip  = (page - 1) * limit;
 
     const filter = {
         $or: [
-            { senderId: myId, receiverId: otherUserId },
-            { senderId: otherUserId, receiverId: myId },
+            { senderId: myId,    receiverId: otherId },
+            { senderId: otherId, receiverId: myId   },
         ],
     };
 
     const [messages, total] = await Promise.all([
-        Message.find(filter)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean(),
+        Message.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
         Message.countDocuments(filter),
     ]);
 
-    await Message.updateMany(
-        { senderId: otherUserId, receiverId: myId, status: { $ne: "seen" } },
-        { status: "seen" }
-    );
+    // ── Mark as seen + Conversation sync ─────────────────────────────────────
+    // getChatHistory খুললে মানে user conversation দেখছে → সব seen হওয়া উচিত
+    const participantKey = [user.id, otherId.toString()].sort().join("_");
+
+    await Promise.all([
+        // Message collection-এ সব pending message seen করো
+        Message.updateMany(
+            { senderId: otherId, receiverId: myId, status: { $ne: "seen" } },
+            { status: "seen" }
+        ),
+        // Conversation-এ unread count reset + lastMessageStatus sync
+        // Bug fix: আগে শুধু unreadCount reset হতো, lastMessageStatus "seen" হতো না
+        Conversation.updateOne(
+            {
+                participantKey,
+                // শুধু তখনই seen করো যখন last message অন্যজনের পাঠানো
+                lastMessageSenderId: otherId,
+            },
+            {
+                $set: {
+                    lastMessageStatus:             "seen",
+                    [`unreadCounts.${user.id}`]:    0,
+                },
+            }
+        ),
+    ]);
 
     sendResponse(res, {
         statusCode: 200,
@@ -54,82 +82,42 @@ export const getChatHistory = catchAsync(async (req: Request, res: Response) => 
 
 // ─── GET /api/v1/chat/conversations ──────────────────────────────────────────
 export const getConversationList = catchAsync(async (req: Request, res: Response) => {
-    const user = (req as any).user;
-    const myId = new Types.ObjectId(user.id);
+    const user      = (req as any).user;
+    const myId      = new Types.ObjectId(user.id);
     const isPremium = user.subscription === "premium";
 
-    const conversations = await Message.aggregate([
-        {
-            $match: {
-                $or: [{ senderId: myId }, { receiverId: myId }],
-            },
-        },
-        { $sort: { createdAt: -1 } },
-        {
-            $addFields: {
-                otherUser: {
-                    $cond: [{ $eq: ["$senderId", myId] }, "$receiverId", "$senderId"],
-                },
-            },
-        },
-        {
-            $group: {
-                _id: "$otherUser",
-                lastMessage: { $first: "$content" },
-                lastMessageType: { $first: "$type" },
-                lastMessageTime: { $first: "$createdAt" },
-                status: { $first: "$status" },
-                unreadCount: {
-                    $sum: {
-                        $cond: [
-                            {
-                                $and: [
-                                    { $eq: ["$receiverId", myId] },
-                                    { $ne: ["$status", "seen"] },
-                                ],
-                            },
-                            1,
-                            0,
-                        ],
-                    },
-                },
-            },
-        },
-        {
-            $lookup: {
-                from: "users",
-                localField: "_id",
-                foreignField: "_id",
-                as: "userInfo",
-            },
-        },
-        { $unwind: { path: "$userInfo", preserveNullAndEmptyArrays: true } },
-        {
-            $project: {
-                _id: 0,
-                userId: "$_id",
-                name: "$userInfo.name",
-                avatar: "$userInfo.avatar",
-                lastMessage: 1,
-                lastMessageType: 1,
-                lastMessageTime: 1,
-                status: 1,
-                unreadCount: 1,
-            },
-        },
-        { $sort: { lastMessageTime: -1 } },
-    ]);
+    const conversations = await Conversation.find({ participantIds: myId })
+        .sort({ lastMessageAt: -1 })
+        .populate("participantIds", "name avatar")
+        .lean();
 
     const result = conversations.map((conv) => {
+        const otherUser = (conv.participantIds as any[]).find(
+            (p: any) => p?._id?.toString() !== user.id
+        );
+
+        const unreadCount =
+            (conv.unreadCounts as Record<string, number>)?.[user.id] ?? 0;
+
+        const base = {
+            userId:          otherUser?._id    ?? null,
+            name:            otherUser?.name   ?? null,
+            avatar:          otherUser?.avatar ?? null,
+            lastMessageTime: conv.lastMessageAt,
+            unreadCount,
+        };
+
         if (!isPremium) {
-            return {
-                ...conv,
-                lastMessage: null,
-                lastMessageType: null,
-                isLocked: true,
-            };
+            return { ...base, lastMessage: null, lastMessageType: null, isLocked: true };
         }
-        return { ...conv, isLocked: false };
+
+        return {
+            ...base,
+            lastMessage:     conv.lastMessage,
+            lastMessageType: conv.lastMessageType,
+            status:          conv.lastMessageStatus,
+            isLocked:        false,
+        };
     });
 
     sendResponse(res, {
