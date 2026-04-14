@@ -6,27 +6,35 @@ import { getCachedUser, setCachedUser, TCachedUser } from "../app/modules/user/u
 import { User } from "../app/modules/user/user.model";
 import { JwtPayload } from "jsonwebtoken";
 
+
 export interface AuthRequest extends Request {
-    user?: JwtPayload & { id: string;  role: string };
+    user?: JwtPayload & { id: string; role: string };
 }
 
 const authenticate = async (req: Request, _res: Response, next: NextFunction) => {
     try {
-        // ── Step 1: Token extract — cookie first, header fallback ─────────────
-        // Web clients use HttpOnly cookie, mobile clients use Authorization header
-        const token =
-            req.cookies?.accessToken ||
-            req.headers.authorization?.split(" ")[1];
+        // ── Step 1: Extract token ─────────────────────────────────────────────
+        // FIX: "Bearer <token>" এবং raw "<token>" দুটোই accept করে
+        const authHeader = req.headers.authorization;
+
+        if (!authHeader) {
+            throw new AppError(StatusCodes.UNAUTHORIZED, "No token provided");
+        }
+
+        // "Bearer eyJ..." হলে split করে নাও, না হলে পুরোটাই token
+        const token = authHeader.startsWith("Bearer ")
+            ? authHeader.slice(7)   // "Bearer " = 7 chars
+            : authHeader.trim();
 
         if (!token) {
             throw new AppError(StatusCodes.UNAUTHORIZED, "No token provided");
         }
 
-        // ── Step 2: JWT signature + expiry verify ────────────────────────────
-        const decoded = verifyAccessToken(token); // throws if expired/tampered
+        // ── Step 2: JWT verify ────────────────────────────────────────────────
+        const decoded = verifyAccessToken(token);
 
-        // ── Step 3: Redis blacklist check (logout / revoked tokens) ──────────
-        const jti = token.split(".")[2]; // signature segment as unique ID
+        // ── Step 3: Blacklist check ───────────────────────────────────────────
+        const jti = token.split(".")[2];
         const blacklisted = await isAccessTokenBlacklisted(jti);
 
         if (blacklisted) {
@@ -36,10 +44,10 @@ const authenticate = async (req: Request, _res: Response, next: NextFunction) =>
             );
         }
 
-        // ── Step 4: Redis cache — fresh user data ────────────────────────────
+        // ── Step 4: Redis cache check ─────────────────────────────────────────
         let freshUser: TCachedUser | null = await getCachedUser(decoded.id);
 
-        // ── Step 5: Cache miss → DB query → warm cache ───────────────────────
+        // ── Step 5: Cache miss → DB ───────────────────────────────────────────
         if (!freshUser) {
             const dbUser = await User.findById(decoded.id)
                 .select("role isVerified isProfileCompleted subscription isBlocked isDeleted")
@@ -50,32 +58,30 @@ const authenticate = async (req: Request, _res: Response, next: NextFunction) =>
             }
 
             freshUser = {
-                _id: String(dbUser._id),
-                role: dbUser.role,
-                isVerified: dbUser.isVerified ?? false,
-                isProfileCompleted: dbUser.isProfileCompleted ?? false,
-                subscription: dbUser.subscription,
-                isBlocked: dbUser.isBlocked ?? false,
-                isDeleted: dbUser.isDeleted ?? false,
+                _id:                String(dbUser._id),
+                role:               dbUser.role,
+                isVerified:         dbUser.isVerified,
+                isProfileCompleted: dbUser.isProfileCompleted as boolean,
+                subscription:       dbUser.subscription,
+                isBlocked:          dbUser.isBlocked,
+                isDeleted:          dbUser.isDeleted,
             };
 
-            await setCachedUser(freshUser); // next request → cache hit (~1ms)
+            await setCachedUser(freshUser);
         }
 
-        // ── Step 6: Live status checks ───────────────────────────────────────
+        // ── Step 6: Guard checks ──────────────────────────────────────────────
         if (freshUser.isDeleted) {
             throw new AppError(StatusCodes.UNAUTHORIZED, "Account no longer exists");
         }
-
         if (freshUser.isBlocked) {
             throw new AppError(StatusCodes.FORBIDDEN, "Your account has been blocked");
         }
-
         if (!freshUser.isVerified) {
             throw new AppError(StatusCodes.FORBIDDEN, "Please verify your account first");
         }
 
-     
+        // ── Step 7: Attach live user to request ───────────────────────────────
         req.user = freshUser;
 
         next();
@@ -85,6 +91,7 @@ const authenticate = async (req: Request, _res: Response, next: NextFunction) =>
 };
 
 export default authenticate;
+
 export const authorize = (...roles: string[]) => {
     return (req: Request, res: Response, next: NextFunction) => {
         const authReq = req as AuthRequest;
