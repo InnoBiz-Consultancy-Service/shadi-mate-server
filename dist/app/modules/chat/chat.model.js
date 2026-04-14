@@ -19,35 +19,14 @@ const messageSchema = new mongoose_1.Schema({
     },
 }, { timestamps: true });
 // ─── Message Indexes ──────────────────────────────────────────────────────────
-//
-// FIX: আগে 4টা index ছিল — {senderId,createdAt} redundant ছিল।
-// MongoDB prefix rule: compound {senderId,receiverId,createdAt} এর
-// left prefix হিসেবে {senderId} query automatically covered।
-// Extra index শুধু write overhead বাড়ায়।
-//
-// getChatHistory $or filter:
-//   [{senderId:X,receiverId:Y},{senderId:Y,receiverId:X}]
-//   → দুটো branch-ই compound index hit করে।
-//
-// mark-as-seen: {receiverId, status:{$ne:"seen"}} → second index hit করে।
-messageSchema.index({ senderId: 1, receiverId: 1, createdAt: -1 }); // chat history
-messageSchema.index({ receiverId: 1, status: 1 }); // mark-as-seen
+messageSchema.index({ senderId: 1, receiverId: 1, createdAt: -1 });
+messageSchema.index({ receiverId: 1, senderId: 1, status: 1 });
 exports.Message = (0, mongoose_1.model)("Message", messageSchema);
-// ─── Conversation Schema ──────────────────────────────────────────────────────
-//
-// FIX (Critical): আগের code-এ participantIds array-তে {unique:true} দেওয়া হয়েছিল।
-// MongoDB-তে array-এ unique index প্রতিটা element-কে unique ধরে, পুরো array-কে নয়।
-// ফলে [A,B] এবং [B,A] দুটো আলাদা document তৈরি হতো — duplicate conversation।
-//
-// Solution: participantKey — "smallerId_largerId" format-এ sorted string।
-// Sort করা থাকায় [A,B] এবং [B,A] সবসময় একই key তৈরি করে।
-// এই field-এ unique index → 50,000 concurrent upsert-এও race condition নেই।
 const conversationSchema = new mongoose_1.Schema({
-    // "smallerObjectId_largerObjectId" — handler সর্বদা এটা sorted বানিয়ে দেয়
     participantKey: {
         type: String,
         required: true,
-        unique: true, // এখানেই real uniqueness enforce হয়
+        unique: true,
     },
     participantIds: {
         type: [mongoose_1.Schema.Types.ObjectId],
@@ -66,9 +45,6 @@ const conversationSchema = new mongoose_1.Schema({
         enum: ["sent", "delivered", "seen"],
         default: "sent",
     },
-    // FIX: Map এর বদলে Mixed ব্যবহার।
-    // lean() করার পর Mongoose Map → plain object হয়, .get() method থাকে না।
-    // Mixed = always plain object, direct key access কাজ করে নিশ্চিতভাবে।
     unreadCounts: {
         type: mongoose_1.Schema.Types.Mixed,
         default: {},

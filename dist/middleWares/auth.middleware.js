@@ -18,56 +18,83 @@ const AppError_1 = __importDefault(require("../helpers/AppError"));
 const token_utils_1 = require("../utils/token.utils");
 const user_cache_1 = require("../app/modules/user/user.cache");
 const user_model_1 = require("../app/modules/user/user.model");
+// ─── AUTHORIZE ─────────────────────────────────────────
+const authorize = (...roles) => {
+    return (req, res, next) => {
+        if (!req.user || !roles.includes(req.user.role)) {
+            return next(new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "You do not have permission to perform this action"));
+        }
+        next();
+    };
+};
+exports.authorize = authorize;
+// ─── AUTHENTICATE ──────────────────────────────────────
 const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c, _d, _e, _f;
+    var _a;
     try {
-        // ── Step 1: Token extract — cookie first, header fallback ─────────────
-        // Web clients use HttpOnly cookie, mobile clients use Authorization header
-        const token = ((_a = req.cookies) === null || _a === void 0 ? void 0 : _a.accessToken) ||
-            ((_b = req.headers.authorization) === null || _b === void 0 ? void 0 : _b.split(" ")[1]);
+        // ✅ token from header OR cookie
+        const authHeader = req.headers.authorization;
+        const cookieToken = (_a = req.cookies) === null || _a === void 0 ? void 0 : _a.accessToken;
+        let token;
+        if (authHeader === null || authHeader === void 0 ? void 0 : authHeader.startsWith("Bearer ")) {
+            token = authHeader.split(" ")[1];
+        }
+        else if (cookieToken) {
+            token = cookieToken;
+        }
         if (!token) {
             throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "No token provided");
         }
-        // ── Step 2: JWT signature + expiry verify ────────────────────────────
-        const decoded = (0, token_utils_1.verifyAccessToken)(token); // throws if expired/tampered
-        // ── Step 3: Redis blacklist check (logout / revoked tokens) ──────────
-        const jti = token.split(".")[2]; // signature segment as unique ID
+        // ✅ verify token
+        const decoded = (0, token_utils_1.verifyAccessToken)(token);
+        if (!(decoded === null || decoded === void 0 ? void 0 : decoded.id)) {
+            throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid token");
+        }
+        if (decoded.id === "pending") {
+            throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Please verify your account first");
+        }
+        // ✅ blacklist check
+        const jti = token.split(".")[2];
         const blacklisted = yield (0, token_utils_1.isAccessTokenBlacklisted)(jti);
         if (blacklisted) {
-            throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Token has been revoked. Please login again");
+            throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Token revoked. Login again");
         }
-        // ── Step 4: Redis cache — fresh user data ────────────────────────────
-        let freshUser = yield (0, user_cache_1.getCachedUser)(decoded.id);
-        // ── Step 5: Cache miss → DB query → warm cache ───────────────────────
-        if (!freshUser) {
+        // ✅ cache check
+        let user = yield (0, user_cache_1.getCachedUser)(decoded.id);
+        // ✅ DB fallback
+        if (!user) {
             const dbUser = yield user_model_1.User.findById(decoded.id)
-                .select("role isVerified isProfileCompleted subscription isBlocked isDeleted")
+                .select("role isVerified isBlocked isDeleted")
                 .lean();
             if (!dbUser) {
                 throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "User not found");
             }
-            freshUser = {
+            user = {
                 _id: String(dbUser._id),
                 role: dbUser.role,
-                isVerified: (_c = dbUser.isVerified) !== null && _c !== void 0 ? _c : false,
-                isProfileCompleted: (_d = dbUser.isProfileCompleted) !== null && _d !== void 0 ? _d : false,
-                subscription: dbUser.subscription,
-                isBlocked: (_e = dbUser.isBlocked) !== null && _e !== void 0 ? _e : false,
-                isDeleted: (_f = dbUser.isDeleted) !== null && _f !== void 0 ? _f : false,
+                isVerified: dbUser.isVerified,
+                isBlocked: dbUser.isBlocked,
+                isDeleted: dbUser.isDeleted,
+                isProfileCompleted: false,
+                subscription: "free",
             };
-            yield (0, user_cache_1.setCachedUser)(freshUser); // next request → cache hit (~1ms)
+            yield (0, user_cache_1.setCachedUser)(user);
         }
-        // ── Step 6: Live status checks ───────────────────────────────────────
-        if (freshUser.isDeleted) {
-            throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Account no longer exists");
+        // ✅ guards
+        if (user.isDeleted) {
+            throw new AppError_1.default(401, "Account deleted");
         }
-        if (freshUser.isBlocked) {
-            throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Your account has been blocked");
+        if (user.isBlocked) {
+            throw new AppError_1.default(403, "Account blocked");
         }
-        if (!freshUser.isVerified) {
-            throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Please verify your account first");
+        if (!user.isVerified) {
+            throw new AppError_1.default(403, "Please verify account");
         }
-        req.user = freshUser;
+        // ✅ FINAL ATTACH
+        req.user = {
+            id: user._id,
+            role: user.role,
+        };
         next();
     }
     catch (err) {
@@ -75,13 +102,3 @@ const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, func
     }
 });
 exports.default = authenticate;
-const authorize = (...roles) => {
-    return (req, res, next) => {
-        const authReq = req;
-        if (!authReq.user || !roles.includes(authReq.user.role)) {
-            return next(new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "You do not have permission to perform this action"));
-        }
-        next();
-    };
-};
-exports.authorize = authorize;
