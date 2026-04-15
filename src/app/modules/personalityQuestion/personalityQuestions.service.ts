@@ -1,6 +1,7 @@
 import { StatusCodes } from "http-status-codes";
 import AppError from "../../../helpers/AppError";
 import { PersonalityQuestion, GuestTestResult } from "./personalityQuestions.model";
+import { Profile } from "../profile/profile.model";
 
 const getQuestions = async () => {
 
@@ -9,6 +10,8 @@ const getQuestions = async () => {
         .sort({ order: 1 })
         .select("-__v");
 };
+
+
 
 const submitTest = async (payload: any) => {
     const { answers } = payload;
@@ -21,56 +24,92 @@ const submitTest = async (payload: any) => {
     let ambitious = 0;
     let balanced = 0;
 
-    // Question category mapping
+    // ✅ category mapping
     const caringQ = [1, 2, 3, 4, 9, 12, 15];
     const ambitiousQ = [5, 6, 8, 11];
     const balancedQ = [7, 10, 13, 14];
 
+    // ✅ reverse questions
+    const reverseQ = [5, 14];
+
+    // ✅ DB থেকে প্রশ্ন নিয়ে map বানানো (fast)
     const dbQuestions = await PersonalityQuestion.find();
+    const questionMap = new Map(
+        dbQuestions.map((q) => [q._id.toString(), q])
+    );
 
-    answers.forEach((userAnswer: any) => {
-        if (userAnswer.selectedOption !== "agree") return;
+    // ✅ calculation
+    for (const userAnswer of answers) {
+        const question = questionMap.get(userAnswer.questionId.toString());
+        if (!question) continue;
 
-        const question = dbQuestions.find(
-            (q) => q._id.toString() === userAnswer.questionId.toString()
+        const selectedOption = question.options.find(
+            (opt) => opt.label === userAnswer.selectedOption
         );
+        if (!selectedOption) continue;
 
-        if (!question) return;
+        let score = selectedOption.score;
 
-        const order = question.order;
+        // reverse logic
+        if (reverseQ.includes(question.order)) {
+            score = 2 - score;
+        }
 
-        if (caringQ.includes(order)) caring++;
-        else if (ambitiousQ.includes(order)) ambitious++;
-        else if (balancedQ.includes(order)) balanced++;
-    });
+        if (caringQ.includes(question.order)) caring += score;
+        else if (ambitiousQ.includes(question.order)) ambitious += score;
+        else if (balancedQ.includes(question.order)) balanced += score;
+    }
 
-    // determine personality type
+    // ✅ result determine
+    const max = Math.max(caring, ambitious, balanced);
+
     let type = "";
     let message = "";
 
-    if (caring >= ambitious && caring >= balanced) {
+    if (max === caring) {
         type = "Caring Soul";
         message =
-            "আপনি সম্পর্কের গভীরতা এবং সঙ্গীর যত্নে বিশ্বাসী। আপনার কাছে বিশ্বাস আর ভালোবাসাই একটি সুন্দর জীবনের মূল ভিত্তি।";
-    } else if (balanced >= ambitious && balanced >= caring) {
+            "You lead with your heart. You value deep emotional connection, trust, and genuine care in a relationship.";
+    } else if (max === balanced) {
         type = "Balanced Thinker";
         message =
-            "আপনি হুটহাট আবেগ দিয়ে চলেন না। আপনি যেমন সঙ্গীকে ভালোবাসেন, তেমনি নিজের স্বাধীনতা এবং ব্যক্তিগত পছন্দগুলোকেও গুরুত্বের সাথে দেখেন।";
+            "You maintain a healthy balance between emotion and logic. You value both love and personal space equally.";
     } else {
         type = "Ambitious Mind";
         message =
-            "আপনি নিজের ক্যারিয়ার এবং ব্যক্তিগত লক্ষ্য নিয়ে সচেতন। আপনি এমন একজন সঙ্গী চান যে শুধু আপনার জীবনসঙ্গী নয়, বরং আপনার স্বপ্নের পথে একজন দারুণ সহযোগী হবে।";
+            "You are goal-oriented and driven. You seek a partner who can grow and build a successful future with you.";
     }
 
-    // Save only answers and result
+    // ✅ save result
     const result = await GuestTestResult.create({
         answers,
         type,
         message
     });
 
-    return result;
+    // ✅ suggestions (top 5 profiles)
+    const suggestions = await Profile.find({ personality: type })
+        .populate("userId", "name gender")
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean();
+
+    // ✅ total count
+    const total = await Profile.countDocuments({
+        personality: type
+    });
+
+    return {
+        result: {
+            type,
+            message
+        },
+        suggestions,
+        total
+    };
 };
+
+
 const getSingleResultFromDB = async (id: string) => {
     const result = await GuestTestResult.findById(id)
         .select("type message email name gender -_id");
