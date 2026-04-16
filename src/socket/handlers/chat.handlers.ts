@@ -6,14 +6,6 @@ import { IgnoreService } from "../../app/modules/ignore/ignore.service";
 import { getIO } from "./socketSingleton";
 import redisClient from "../../utils/redis";
 
-// ─── Helper: participantKey তৈরি করো ─────────────────────────────────────────
-// FIX (Critical Race Condition): আগের code-এ participantIds array-এ
-// {$all:[A,B],$size:2} দিয়ে upsert করা হতো।
-// Problem: [A,B] এবং [B,A] MongoDB-তে আলাদা array, unique index কাজ করে না।
-// 50,000 concurrent request-এ একসাথে upsert পাঠালে duplicate document তৈরি হয়।
-//
-// Solution: string key "smallerId_largerId" → সর্বদা same string, race condition নেই।
-// Mongoose unique index এই key-এ enforce করে → database level guarantee।
 const makeParticipantKey = (a: string, b: string): string => {
     return [a, b].sort().join("_");
 };
@@ -22,6 +14,7 @@ export const chatHandler = (socket: Socket) => {
     socket.on("send-message", async (data) => {
         const senderId     = socket.data.userId;
         const subscription = socket.data.subscription;
+        console.log("📨 send-message received:", { senderId, subscription, data });
 
         if (!senderId) {
             socket.emit("error", { message: "Unauthorized" });
@@ -43,13 +36,11 @@ export const chatHandler = (socket: Socket) => {
             return;
         }
 
-        // নিজেকে message পাঠানো আটকাও
         if (senderId === receiverId) {
             socket.emit("error", { message: "Cannot send message to yourself" });
             return;
         }
 
-        // Message content sanitize — XSS আটকাতে trim করো
         const sanitizedMessage = String(message).trim();
         if (!sanitizedMessage) {
             socket.emit("error", { message: "Message cannot be empty" });
@@ -88,9 +79,10 @@ export const chatHandler = (socket: Socket) => {
             status: "sent",
         });
 
-        const io             = getIO();
-        const receiverSocketId = await redisClient.hget("onlineUsers", receiverId);
-        let finalStatus      = "sent";
+        const io = getIO();
+        // FIX: hget → hGet (node-redis v4)
+        const receiverSocketId = await redisClient.hGet("onlineUsers", receiverId);
+        let finalStatus = "sent";
 
         if (receiverSocketId) {
             await Message.findByIdAndUpdate(savedMessage._id, { status: "delivered" });
@@ -107,9 +99,7 @@ export const chatHandler = (socket: Socket) => {
             });
         }
 
-        // ─── Conversation upsert (race-condition safe) ────────────────────────
-        // FIX: participantKey দিয়ে upsert — unique string index guarantee করে
-        // একই pair-এর জন্য কখনো duplicate document হবে না, এমনকি concurrent-এ।
+        // ─── Conversation upsert ──────────────────────────────────────────────
         const participantKey = makeParticipantKey(senderId, receiverId);
         const sortedIds      = [senderId, receiverId].sort();
 
@@ -124,10 +114,8 @@ export const chatHandler = (socket: Socket) => {
                     lastMessageSenderId: senderId,
                     lastMessageAt:       savedMessage.createdAt,
                     lastMessageStatus:   finalStatus,
-                    // Sender-এর unread count 0 রাখো (নিজের পাঠানো message unread নয়)
                     [`unreadCounts.${senderId}`]: 0,
                 },
-                // Receiver-এর unread count বাড়াও
                 $inc: { [`unreadCounts.${receiverId}`]: 1 },
             },
             { upsert: true, new: true }

@@ -16,6 +16,9 @@ const messageSchema = new Schema(
       enum: ["sent", "delivered", "seen"],
       default: "sent",
     },
+    imageUrl: { type: String },
+    fileUrl:  { type: String },
+    voiceUrl: { type: String },
   },
   { timestamps: true }
 );

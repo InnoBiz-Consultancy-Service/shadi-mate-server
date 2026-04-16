@@ -22,11 +22,18 @@ export const presenceHandler = (socket: Socket) => {
     socket.data.userId = decoded.id;
     socket.data.subscription = decoded.subscription ?? "free";
 
-    redisClient.hset("onlineUsers", decoded.id, socket.id);
+    // FIX: hset → hSet (node-redis v4)
+    // Connect এর সময়ই set করো — পুরনো stale entry overwrite হবে
+    redisClient.hSet("onlineUsers", decoded.id, socket.id);
     console.log(`🟢 User ${decoded.id} is online (subscription: ${socket.data.subscription})`);
 
     socket.on("disconnect", async () => {
-        await redisClient.hdel("onlineUsers", decoded.id);
+        // FIX: hdel → hDel (node-redis v4)
+        // শুধু এই socket এর entry মুছো — same user অন্য tab এ থাকলে সমস্যা নেই
+        const current = await redisClient.hGet("onlineUsers", decoded.id);
+        if (current === socket.id) {
+            await redisClient.hDel("onlineUsers", decoded.id);
+        }
         console.log(`🔴 User ${decoded.id} offline`);
     });
 };

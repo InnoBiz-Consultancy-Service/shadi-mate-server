@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import { catchAsync } from "../../../utils/catchAsync";
 import { sendResponse } from "../../../utils/sendResponse";
-import { ProfileService } from "./profile.service";
+import { getProfileByUserIdFromDB, ProfileService } from "./profile.service";
 
 const createProfile = catchAsync(async (req: Request, res: Response) => {
 
@@ -63,20 +63,18 @@ const getMyProfile = catchAsync(async (req: Request, res: Response) => {
 });
 
 // ─── Get Profile by ID ─────────────────────────
-const getProfileById = catchAsync(async (req: Request, res: Response) => {
-    const profileId = req.params.id;
-    const requestUserId = (req as any).user?.id;
+export const getProfileById = catchAsync(async (req, res) => {
+  const { userId } = req.params;
 
-    const profile = await ProfileService.getProfileById(profileId, requestUserId);
+  const result = await getProfileByUserIdFromDB(userId);
 
-    sendResponse(res, {
-        statusCode: StatusCodes.OK,
-        success: true,
-        message: "Profile retrieved successfully",
-        data: profile,
-    });
+  sendResponse(res, {
+    statusCode: 200,
+    success: true,
+    message: "Profile retrieved successfully",
+    data: result,
+  });
 });
-
 export const ProfileController = {
     createProfile,
     updateProfile,

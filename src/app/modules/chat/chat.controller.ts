@@ -17,9 +17,10 @@ export const getChatHistory = catchAsync(async (req: Request, res: Response) => 
         throw new AppError(StatusCodes.BAD_REQUEST, "Invalid user ID");
     }
 
-    if (user.subscription !== "premium") {
-        throw new AppError(StatusCodes.FORBIDDEN, "Upgrade to premium to view chat history");
-    }
+    // ❌ REMOVED: Premium check - এখন সবাই চ্যাট হিস্ট্রি দেখতে পারবে
+    // if (user.subscription !== "premium") {
+    //     throw new AppError(StatusCodes.FORBIDDEN, "Upgrade to premium to view chat history");
+    // }
 
     const myId    = new Types.ObjectId(user.id);
     const otherId = new Types.ObjectId(req.params.userId);
@@ -45,27 +46,22 @@ export const getChatHistory = catchAsync(async (req: Request, res: Response) => 
     ]);
 
     // ── Mark as seen + Conversation sync ─────────────────────────────────────
-    // getChatHistory খুললে মানে user conversation দেখছে → সব seen হওয়া উচিত
     const participantKey = [user.id, otherId.toString()].sort().join("_");
 
     await Promise.all([
-        // Message collection-এ সব pending message seen করো
         Message.updateMany(
             { senderId: otherId, receiverId: myId, status: { $ne: "seen" } },
             { status: "seen" }
         ),
-        // Conversation-এ unread count reset + lastMessageStatus sync
-        // Bug fix: আগে শুধু unreadCount reset হতো, lastMessageStatus "seen" হতো না
         Conversation.updateOne(
             {
                 participantKey,
-                // শুধু তখনই seen করো যখন last message অন্যজনের পাঠানো
                 lastMessageSenderId: otherId,
             },
             {
                 $set: {
-                    lastMessageStatus:             "seen",
-                    [`unreadCounts.${user.id}`]:    0,
+                    lastMessageStatus: "seen",
+                    [`unreadCounts.${user.id}`]: 0,
                 },
             }
         ),
@@ -84,7 +80,8 @@ export const getChatHistory = catchAsync(async (req: Request, res: Response) => 
 export const getConversationList = catchAsync(async (req: Request, res: Response) => {
     const user      = (req as any).user;
     const myId      = new Types.ObjectId(user.id);
-    const isPremium = user.subscription === "premium";
+    // // সবাই কনভারসেশন দেখতে পারবে, শুধু প্রিমিয়াম ফিচার আলাদা
+    // const isPremium = user.subscription === "premium";
 
     const conversations = await Conversation.find({ participantIds: myId })
         .sort({ lastMessageAt: -1 })
@@ -107,9 +104,10 @@ export const getConversationList = catchAsync(async (req: Request, res: Response
             unreadCount,
         };
 
-        if (!isPremium) {
-            return { ...base, lastMessage: null, lastMessageType: null, isLocked: true };
-        }
+        // // নন-প্রিমিয়াম ইউজারদের জন্য লাস্ট মেসেজ দেখাবে না
+        // if (!isPremium) {
+        //     return { ...base, lastMessage: null, lastMessageType: null, isLocked: true };
+        // }
 
         return {
             ...base,
