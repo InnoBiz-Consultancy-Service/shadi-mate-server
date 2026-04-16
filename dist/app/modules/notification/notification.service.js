@@ -49,7 +49,7 @@ const createAndDeliver = (_a) => __awaiter(void 0, [_a], void 0, function* ({ io
         metadata,
     });
     // ─── Receiver online আছে কিনা check করো ─────────────────────────────────
-    const receiverSocketId = yield redisClient.hget("onlineUsers", recipientId);
+    const receiverSocketId = yield redisClient.hGet("onlineUsers", recipientId);
     if (receiverSocketId) {
         io.to(receiverSocketId).emit("new-notification", {
             _id: notification._id,
