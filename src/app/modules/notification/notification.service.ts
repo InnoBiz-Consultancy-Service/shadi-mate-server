@@ -60,8 +60,7 @@ const createAndDeliver = async ({
     });
 
     // ─── Receiver online আছে কিনা check করো ─────────────────────────────────
-    const receiverSocketId = await redisClient.hget("onlineUsers", recipientId);
-
+const receiverSocketId = await redisClient.hGet("onlineUsers", recipientId);
     if (receiverSocketId) {
         io.to(receiverSocketId).emit("new-notification", {
             _id:       notification._id,
