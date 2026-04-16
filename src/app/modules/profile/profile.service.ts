@@ -7,6 +7,7 @@ import { QueryParams } from "./profile.interface";
 import { invalidateProfileCache } from "../like/like.servce";
 import { calculateCompletionPercentage, getCompletionLabel } from "./profileCompletaion";
 import { ProfileVisitService } from "../profileVisit/profileVisit.service";
+import { Types } from "mongoose";
 
 // ─── Profile Completion Check (boolean — isProfileCompleted flag এর জন্য) ─────
 const checkProfileCompletion = (profile: any) => {
@@ -173,43 +174,22 @@ const getMyProfile = async (userId: string) => {
     };
 };
 
-// ─── Get Profile by ID ────────────────────────────────────────────────────────
-const getProfileById = async (profileId: string, requestUserId?: string) => {
-    if (!profileId) throw new AppError(StatusCodes.BAD_REQUEST, "Profile ID is required");
+export const getProfileByUserIdFromDB = async (userId: string) => {
+  // 🔒 Validate ObjectId
+  if (!Types.ObjectId.isValid(userId)) {
+    throw new AppError(StatusCodes.BAD_REQUEST, "Invalid user ID");
+  }
 
-    const profile = await Profile.findById(profileId)
-        .populate("userId", "name phone gender")
-        .populate("address.divisionId", "name")
-        .populate("address.districtId", "name")
-        .populate("address.thanaId", "name")
-        .lean();
+  // 🔥 মূল fix — userId দিয়ে profile খোঁজা
+  const profile = await Profile.findOne({ userId })
+    .populate("userId", "name email") // optional
+    .lean();
 
-    if (!profile) throw new AppError(StatusCodes.NOT_FOUND, "Profile not found");
+  if (!profile) {
+    throw new AppError(StatusCodes.NOT_FOUND, "Profile not found");
+  }
 
-    // ─── Visit record করো (নিজের profile হলে করবে না) ───────────────────────
-    const profileUserId = (profile.userId as any)?._id?.toString();
-    if (requestUserId && profileUserId !== requestUserId) {
-        // fire-and-forget — visit log fail হলে profile fetch block হবে না
-        ProfileVisitService.recordVisit(requestUserId, profileUserId).catch(() => { });
-    }
-
-    // ─── নিজের profile দেখলে completion percentage দেখাবে ────────────────────
-    if (requestUserId && profileUserId === requestUserId) {
-        const user = await User.findById(requestUserId).lean();
-        const completion = calculateCompletionPercentage(user, profile);
-
-        return {
-            ...profile,
-            completionPercentage: completion.percentage,
-            completionLabel: getCompletionLabel(completion.percentage),
-            missingFields: completion.missingFields.map((f) => ({
-                key: f.key,
-                label: f.label,
-            })),
-        };
-    }
-
-    return profile;
+  return profile;
 };
 
 export const ProfileService = {
@@ -217,5 +197,6 @@ export const ProfileService = {
     updateProfile,
     getProfiles,
     getMyProfile,
-    getProfileById,
+    getProfileByUserIdFromDB
+
 };

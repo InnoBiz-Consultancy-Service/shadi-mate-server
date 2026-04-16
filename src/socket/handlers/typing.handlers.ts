@@ -6,7 +6,8 @@ export const typingHandler = (io: any, socket: Socket) => {
         const senderId = socket.data.userId;
         if (!senderId || !toUserId) return;
 
-        const receiverSocketId = await redisClient.hget("onlineUsers", toUserId);
+        // FIX: hget → hGet (node-redis v4)
+        const receiverSocketId = await redisClient.hGet("onlineUsers", toUserId);
 
         if (receiverSocketId) {
             io.to(String(receiverSocketId)).emit("typing", { fromUserId: senderId });
@@ -17,10 +18,11 @@ export const typingHandler = (io: any, socket: Socket) => {
         const senderId = socket.data.userId;
         if (!senderId || !toUserId) return;
 
-        const receiverSocketId = await redisClient.hget("onlineUsers", toUserId);
+        // FIX: hget → hGet (node-redis v4)
+        const receiverSocketId = await redisClient.hGet("onlineUsers", toUserId);
 
         if (receiverSocketId) {
-            io.to(receiverSocketId).emit("stop-typing", { fromUserId: senderId });
+            io.to(String(receiverSocketId)).emit("stop-typing", { fromUserId: senderId });
         }
     });
 };

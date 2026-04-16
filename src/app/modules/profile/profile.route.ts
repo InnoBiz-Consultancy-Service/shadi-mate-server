@@ -33,7 +33,7 @@ router.get(
 
 // ─── Get Profile by ID ─────────────────────────
 router.get(
-    "/:id",
+    "/:userId",
     authenticate,
     ProfileController.getProfileById
 );
