@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ProfileController = void 0;
+exports.ProfileController = exports.getProfileById = void 0;
 const http_status_codes_1 = require("http-status-codes");
 const catchAsync_1 = require("../../../utils/catchAsync");
 const sendResponse_1 = require("../../../utils/sendResponse");
@@ -56,16 +56,14 @@ const getMyProfile = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0
     });
 }));
 // ─── Get Profile by ID ─────────────────────────
-const getProfileById = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
-    const profileId = req.params.id;
-    const requestUserId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
-    const profile = yield profile_service_1.ProfileService.getProfileById(profileId, requestUserId);
+exports.getProfileById = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const { userId } = req.params;
+    const result = yield (0, profile_service_1.getProfileByUserIdFromDB)(userId);
     (0, sendResponse_1.sendResponse)(res, {
-        statusCode: http_status_codes_1.StatusCodes.OK,
+        statusCode: 200,
         success: true,
         message: "Profile retrieved successfully",
-        data: profile,
+        data: result,
     });
 }));
 exports.ProfileController = {
@@ -73,5 +71,5 @@ exports.ProfileController = {
     updateProfile,
     getProfiles,
     getMyProfile,
-    getProfileById
+    getProfileById: exports.getProfileById
 };

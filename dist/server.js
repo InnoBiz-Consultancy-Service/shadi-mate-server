@@ -32,8 +32,8 @@ const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
             cors: { origin: envConfig_1.envVars.FRONTEND_URL, credentials: true },
         });
         (0, socket_1.initSocket)(io);
-        httpServer.listen(envConfig_1.envVars.PORT, () => {
-            console.log(`🚀 Server running on port ${envConfig_1.envVars.PORT}`);
+        httpServer.listen(envConfig_1.envVars.PORT || 5000, () => {
+            console.log(`🚀 Server running on port ${envConfig_1.envVars.PORT || 5000}`);
         });
         (0, seedSuperAdmin_1.seedSuperAdmin)();
         (0, seedGeoData_1.seedGeoData)();

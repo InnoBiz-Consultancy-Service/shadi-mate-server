@@ -17,6 +17,9 @@ const messageSchema = new mongoose_1.Schema({
         enum: ["sent", "delivered", "seen"],
         default: "sent",
     },
+    imageUrl: { type: String },
+    fileUrl: { type: String },
+    voiceUrl: { type: String },
 }, { timestamps: true });
 // ─── Message Indexes ──────────────────────────────────────────────────────────
 messageSchema.index({ senderId: 1, receiverId: 1, createdAt: -1 });

@@ -27,9 +27,10 @@ exports.getChatHistory = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(vo
     if (!isValidObjectId(req.params.userId)) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Invalid user ID");
     }
-    if (user.subscription !== "premium") {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Upgrade to premium to view chat history");
-    }
+    // ❌ REMOVED: Premium check - এখন সবাই চ্যাট হিস্ট্রি দেখতে পারবে
+    // if (user.subscription !== "premium") {
+    //     throw new AppError(StatusCodes.FORBIDDEN, "Upgrade to premium to view chat history");
+    // }
     const myId = new mongoose_1.Types.ObjectId(user.id);
     const otherId = new mongoose_1.Types.ObjectId(req.params.userId);
     if (myId.equals(otherId)) {
@@ -49,16 +50,11 @@ exports.getChatHistory = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(vo
         chat_model_1.Message.countDocuments(filter),
     ]);
     // ── Mark as seen + Conversation sync ─────────────────────────────────────
-    // getChatHistory খুললে মানে user conversation দেখছে → সব seen হওয়া উচিত
     const participantKey = [user.id, otherId.toString()].sort().join("_");
     yield Promise.all([
-        // Message collection-এ সব pending message seen করো
         chat_model_1.Message.updateMany({ senderId: otherId, receiverId: myId, status: { $ne: "seen" } }, { status: "seen" }),
-        // Conversation-এ unread count reset + lastMessageStatus sync
-        // Bug fix: আগে শুধু unreadCount reset হতো, lastMessageStatus "seen" হতো না
         chat_model_1.Conversation.updateOne({
             participantKey,
-            // শুধু তখনই seen করো যখন last message অন্যজনের পাঠানো
             lastMessageSenderId: otherId,
         }, {
             $set: {
@@ -79,7 +75,8 @@ exports.getChatHistory = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(vo
 exports.getConversationList = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const user = req.user;
     const myId = new mongoose_1.Types.ObjectId(user.id);
-    const isPremium = user.subscription === "premium";
+    // // সবাই কনভারসেশন দেখতে পারবে, শুধু প্রিমিয়াম ফিচার আলাদা
+    // const isPremium = user.subscription === "premium";
     const conversations = yield chat_model_1.Conversation.find({ participantIds: myId })
         .sort({ lastMessageAt: -1 })
         .populate("participantIds", "name avatar")
@@ -95,9 +92,10 @@ exports.getConversationList = (0, catchAsync_1.catchAsync)((req, res) => __await
             lastMessageTime: conv.lastMessageAt,
             unreadCount,
         };
-        if (!isPremium) {
-            return Object.assign(Object.assign({}, base), { lastMessage: null, lastMessageType: null, isLocked: true });
-        }
+        // // নন-প্রিমিয়াম ইউজারদের জন্য লাস্ট মেসেজ দেখাবে না
+        // if (!isPremium) {
+        //     return { ...base, lastMessage: null, lastMessageType: null, isLocked: true };
+        // }
         return Object.assign(Object.assign({}, base), { lastMessage: conv.lastMessage, lastMessageType: conv.lastMessageType, status: conv.lastMessageStatus, isLocked: false });
     });
     (0, sendResponse_1.sendResponse)(res, {

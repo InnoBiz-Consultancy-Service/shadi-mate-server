@@ -24,8 +24,8 @@ const startServer = async () => {
 
         initSocket(io);
 
-        httpServer.listen(envVars.PORT, () => {
-            console.log(`🚀 Server running on port ${envVars.PORT}`);
+        httpServer.listen(envVars.PORT || 5000, () => {
+            console.log(`🚀 Server running on port ${envVars.PORT || 5000}`);
         });
 
         seedSuperAdmin();
