@@ -17,5 +17,5 @@ router.get("/", auth_middleware_1.default, profile_controller_1.ProfileControlle
 // ─── Get My Profile ─────────────────────────
 router.get("/my", auth_middleware_1.default, profile_controller_1.ProfileController.getMyProfile);
 // ─── Get Profile by ID ─────────────────────────
-router.get("/:id", auth_middleware_1.default, profile_controller_1.ProfileController.getProfileById);
+router.get("/:userId", auth_middleware_1.default, profile_controller_1.ProfileController.getProfileById);
 exports.ProfileRoutes = router;

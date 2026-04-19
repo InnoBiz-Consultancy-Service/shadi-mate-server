@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ProfileService = void 0;
+exports.ProfileService = exports.getProfileByUserIdFromDB = void 0;
 const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const http_status_codes_1 = require("http-status-codes");
 const profile_model_1 = require("./profile.model");
@@ -20,7 +20,7 @@ const user_model_1 = require("../user/user.model");
 const profileQueryBuilder_1 = require("../../../utils/profileQueryBuilder");
 const like_servce_1 = require("../like/like.servce");
 const profileCompletaion_1 = require("./profileCompletaion");
-const profileVisit_service_1 = require("../profileVisit/profileVisit.service");
+const mongoose_1 = require("mongoose");
 // ─── Profile Completion Check (boolean — isProfileCompleted flag এর জন্য) ─────
 const checkProfileCompletion = (profile) => {
     var _a, _b, _c, _d, _e;
@@ -132,40 +132,25 @@ const getMyProfile = (userId) => __awaiter(void 0, void 0, void 0, function* () 
             label: f.label,
         })) });
 });
-// ─── Get Profile by ID ────────────────────────────────────────────────────────
-const getProfileById = (profileId, requestUserId) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
-    if (!profileId)
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Profile ID is required");
-    const profile = yield profile_model_1.Profile.findById(profileId)
-        .populate("userId", "name phone gender")
-        .populate("address.divisionId", "name")
-        .populate("address.districtId", "name")
-        .populate("address.thanaId", "name")
-        .lean();
-    if (!profile)
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Profile not found");
-    // ─── Visit record করো (নিজের profile হলে করবে না) ───────────────────────
-    const profileUserId = (_b = (_a = profile.userId) === null || _a === void 0 ? void 0 : _a._id) === null || _b === void 0 ? void 0 : _b.toString();
-    if (requestUserId && profileUserId !== requestUserId) {
-        // fire-and-forget — visit log fail হলে profile fetch block হবে না
-        profileVisit_service_1.ProfileVisitService.recordVisit(requestUserId, profileUserId).catch(() => { });
+const getProfileByUserIdFromDB = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    // 🔒 Validate ObjectId
+    if (!mongoose_1.Types.ObjectId.isValid(userId)) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Invalid user ID");
     }
-    // ─── নিজের profile দেখলে completion percentage দেখাবে ────────────────────
-    if (requestUserId && profileUserId === requestUserId) {
-        const user = yield user_model_1.User.findById(requestUserId).lean();
-        const completion = (0, profileCompletaion_1.calculateCompletionPercentage)(user, profile);
-        return Object.assign(Object.assign({}, profile), { completionPercentage: completion.percentage, completionLabel: (0, profileCompletaion_1.getCompletionLabel)(completion.percentage), missingFields: completion.missingFields.map((f) => ({
-                key: f.key,
-                label: f.label,
-            })) });
+    // 🔥 মূল fix — userId দিয়ে profile খোঁজা
+    const profile = yield profile_model_1.Profile.findOne({ userId })
+        .populate("userId", "name email") // optional
+        .lean();
+    if (!profile) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Profile not found");
     }
     return profile;
 });
+exports.getProfileByUserIdFromDB = getProfileByUserIdFromDB;
 exports.ProfileService = {
     createProfile,
     updateProfile,
     getProfiles,
     getMyProfile,
-    getProfileById,
+    getProfileByUserIdFromDB: exports.getProfileByUserIdFromDB
 };

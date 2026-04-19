@@ -31,10 +31,17 @@ const presenceHandler = (socket) => {
     }
     socket.data.userId = decoded.id;
     socket.data.subscription = (_a = decoded.subscription) !== null && _a !== void 0 ? _a : "free";
-    redis_1.default.hset("onlineUsers", decoded.id, socket.id);
+    // FIX: hset → hSet (node-redis v4)
+    // Connect এর সময়ই set করো — পুরনো stale entry overwrite হবে
+    redis_1.default.hSet("onlineUsers", decoded.id, socket.id);
     console.log(`🟢 User ${decoded.id} is online (subscription: ${socket.data.subscription})`);
     socket.on("disconnect", () => __awaiter(void 0, void 0, void 0, function* () {
-        yield redis_1.default.hdel("onlineUsers", decoded.id);
+        // FIX: hdel → hDel (node-redis v4)
+        // শুধু এই socket এর entry মুছো — same user অন্য tab এ থাকলে সমস্যা নেই
+        const current = yield redis_1.default.hGet("onlineUsers", decoded.id);
+        if (current === socket.id) {
+            yield redis_1.default.hDel("onlineUsers", decoded.id);
+        }
         console.log(`🔴 User ${decoded.id} offline`);
     }));
 };

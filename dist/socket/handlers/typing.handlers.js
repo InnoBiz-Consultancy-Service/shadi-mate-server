@@ -19,7 +19,8 @@ const typingHandler = (io, socket) => {
         const senderId = socket.data.userId;
         if (!senderId || !toUserId)
             return;
-        const receiverSocketId = yield redis_1.default.hget("onlineUsers", toUserId);
+        // FIX: hget → hGet (node-redis v4)
+        const receiverSocketId = yield redis_1.default.hGet("onlineUsers", toUserId);
         if (receiverSocketId) {
             io.to(String(receiverSocketId)).emit("typing", { fromUserId: senderId });
         }
@@ -28,9 +29,10 @@ const typingHandler = (io, socket) => {
         const senderId = socket.data.userId;
         if (!senderId || !toUserId)
             return;
-        const receiverSocketId = yield redis_1.default.hget("onlineUsers", toUserId);
+        // FIX: hget → hGet (node-redis v4)
+        const receiverSocketId = yield redis_1.default.hGet("onlineUsers", toUserId);
         if (receiverSocketId) {
-            io.to(receiverSocketId).emit("stop-typing", { fromUserId: senderId });
+            io.to(String(receiverSocketId)).emit("stop-typing", { fromUserId: senderId });
         }
     }));
 };
