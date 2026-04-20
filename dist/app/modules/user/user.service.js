@@ -145,7 +145,7 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
         purpose: "registration",
     });
     if (!otpDoc) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Account not found");
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid credentials");
     }
     if (otpDoc.expiresAt < new Date()) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.GONE, "OTP expired. Please register again");
