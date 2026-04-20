@@ -8,13 +8,13 @@ import { getIO } from "../../../socket/handlers/socketSingleton";
 import redisClient from "../../../utils/redis";
 
 
-// ─── Cache Keys ──────────────────────────────────────────────────────────────
-const LIKE_COUNT_KEY = (userId: string) => `like:count:${userId}`;
-const LIKE_SENDERS_KEY = (userId: string) => `like:senders:${userId}`;
-const MY_LIKES_KEY = (userId: string) => `like:given:${userId}`;
+// ─── Cache Keys ───────────────────────────────────────────────────────────────
+const LIKE_COUNT_KEY    = (userId: string) => `like:count:${userId}`;
+const LIKE_SENDERS_KEY  = (userId: string) => `like:senders:${userId}`;
+const MY_LIKES_KEY      = (userId: string) => `like:given:${userId}`;
 const PROFILE_CACHE_KEY = (userId: string) => `profile:${userId}`;
 
-const LIKE_LIST_TTL = 60 * 5;
+const LIKE_LIST_TTL     = 60 * 5;
 const PROFILE_CACHE_TTL = 60 * 10;
 
 const PROFILE_SELECT_FIELDS =
@@ -29,7 +29,6 @@ const batchGetProfiles = async (userIds: string[]) => {
     let cachedValues: (string | null)[] = [];
 
     try {
-        // ✅ node-redis v4: mGet accepts an array
         cachedValues = await redisClient.mGet(cacheKeys);
     } catch (_) {
         cachedValues = new Array(userIds.length).fill(null);
@@ -58,13 +57,11 @@ const batchGetProfiles = async (userIds: string[]) => {
             .populate("address.districtId", "name")
             .lean();
 
-        // ✅ node-redis v4: multi() instead of pipeline()
         const multi = redisClient.multi();
 
         for (const profile of profiles) {
             const uid = (profile.userId as any)._id.toString();
             profileMap[uid] = profile;
-            // ✅ node-redis v4: setEx (camelCase) instead of setex
             multi.setEx(PROFILE_CACHE_KEY(uid), PROFILE_CACHE_TTL, JSON.stringify(profile));
         }
 
@@ -99,6 +96,7 @@ const toggleLike = async (fromUserId: string, toUserId: string) => {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
 
+    // ─── existingLike check ───────────────────────────────────────────────────
     const existingLike = await Like.findOne({ fromUserId, toUserId });
 
     let action: "liked" | "unliked";
@@ -108,10 +106,19 @@ const toggleLike = async (fromUserId: string, toUserId: string) => {
         await Like.deleteOne({ _id: existingLike._id });
         action = "unliked";
     } else {
-        // ─── Like ─────────────────────────────────────────────────────────────
-        await Like.create({ fromUserId, toUserId });
+
+        try {
+            await Like.create({ fromUserId, toUserId });
+        } catch (err: any) {
+            if (err?.code === 11000) {
+                // duplicate key — already liked, action liked হিসেবেই return করো
+                return { action: "liked" as const };
+            }
+            throw err;
+        }
         action = "liked";
 
+        // ─── Notification — fire and forget ──────────────────────────────────
         try {
             const sender = await User.findById(fromUserId).select("name").lean();
             const senderName = sender?.name ?? "Someone";
@@ -154,16 +161,21 @@ const getLikeCount = async (targetUserId: string) => {
     const count = await Like.countDocuments({ toUserId: targetUserId });
 
     try {
-        // ✅ node-redis v4: setEx (camelCase)
         await redisClient.setEx(cacheKey, LIKE_LIST_TTL, count.toString());
     } catch (_) { }
 
     return { count };
 };
 
-// ─── Get Who Liked Me (Premium Only) ─────────────────────────────────────────
-const getWhoLikedMe = async (userId: string, subscription: string) => {
-    if (subscription !== "premium") {
+
+const getWhoLikedMe = async (userId: string) => {
+    const user = await User.findById(userId).select("subscription").lean();
+
+    if (!user) {
+        throw new AppError(StatusCodes.NOT_FOUND, "User not found");
+    }
+
+    if (user.subscription !== "premium") {
         throw new AppError(
             StatusCodes.FORBIDDEN,
             "Upgrade to premium to see who liked your profile"
@@ -191,7 +203,6 @@ const getWhoLikedMe = async (userId: string, subscription: string) => {
     }));
 
     try {
-        // ✅ node-redis v4: setEx (camelCase)
         await redisClient.setEx(cacheKey, LIKE_LIST_TTL, JSON.stringify(result));
     } catch (_) { }
 
@@ -221,7 +232,6 @@ const getMyLikes = async (userId: string) => {
     }));
 
     try {
-        // ✅ node-redis v4: setEx (camelCase)
         await redisClient.setEx(cacheKey, LIKE_LIST_TTL, JSON.stringify(result));
     } catch (_) { }
 

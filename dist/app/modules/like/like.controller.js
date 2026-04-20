@@ -39,8 +39,7 @@ const getLikeCount = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0
 }));
 const getWhoLikedMe = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = req.user.id;
-    const subscription = req.user.subscription;
-    const result = yield like_servce_1.LikeService.getWhoLikedMe(userId, subscription);
+    const result = yield like_servce_1.LikeService.getWhoLikedMe(userId);
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.OK,
         success: true,

@@ -12,12 +12,12 @@ import {
 } from "../app/modules/user/user.cache";
 import { User } from "../app/modules/user/user.model";
 
-// ✅ GLOBAL TYPE FIX (MOST IMPORTANT)
 declare global {
   namespace Express {
     interface UserPayload {
       id: string;
       role: string;
+      subscription: string; 
     }
 
     interface Request {
@@ -26,7 +26,7 @@ declare global {
   }
 }
 
-// ─── AUTHORIZE ─────────────────────────────────────────
+// ─── AUTHORIZE ────────────────────────────────────────────────────────────────
 export const authorize = (...roles: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.user || !roles.includes(req.user.role)) {
@@ -41,14 +41,13 @@ export const authorize = (...roles: string[]) => {
   };
 };
 
-// ─── AUTHENTICATE ──────────────────────────────────────
+// ─── AUTHENTICATE ─────────────────────────────────────────────────────────────
 const authenticate = async (
   req: Request,
   _res: Response,
   next: NextFunction
 ) => {
   try {
-    // ✅ token from header OR cookie
     const authHeader = req.headers.authorization;
     const cookieToken = (req as any).cookies?.accessToken;
 
@@ -64,7 +63,7 @@ const authenticate = async (
       throw new AppError(StatusCodes.UNAUTHORIZED, "No token provided");
     }
 
-    // ✅ verify token
+    // ─── Token verify ─────────────────────────────────────────────────────────
     const decoded: any = verifyAccessToken(token);
 
     if (!decoded?.id) {
@@ -78,7 +77,7 @@ const authenticate = async (
       );
     }
 
-    // ✅ blacklist check
+    // ─── Blacklist check ──────────────────────────────────────────────────────
     const jti = token.split(".")[2];
     const blacklisted = await isAccessTokenBlacklisted(jti);
 
@@ -89,13 +88,13 @@ const authenticate = async (
       );
     }
 
-    // ✅ cache check
+    // ─── Redis cache check ────────────────────────────────────────────────────
     let user: TCachedUser | null = await getCachedUser(decoded.id);
 
-    // ✅ DB fallback
+    // ─── DB fallback — cache miss হলে ────────────────────────────────────────
     if (!user) {
       const dbUser = await User.findById(decoded.id)
-        .select("role isVerified isBlocked isDeleted")
+        .select("role isVerified isBlocked isDeleted isProfileCompleted subscription")
         .lean();
 
       if (!dbUser) {
@@ -108,30 +107,30 @@ const authenticate = async (
         isVerified: dbUser.isVerified,
         isBlocked: dbUser.isBlocked,
         isDeleted: dbUser.isDeleted,
-        isProfileCompleted: false,
-        subscription: "free",
+        isProfileCompleted: dbUser.isProfileCompleted ?? false, 
+        subscription: dbUser.subscription ?? "free",         
       };
 
       await setCachedUser(user);
     }
 
-    // ✅ guards
+    // ─── Guards ───────────────────────────────────────────────────────────────
     if (user.isDeleted) {
-      throw new AppError(401, "Account deleted");
+      throw new AppError(StatusCodes.UNAUTHORIZED, "Account deleted");
     }
 
     if (user.isBlocked) {
-      throw new AppError(403, "Account blocked");
+      throw new AppError(StatusCodes.FORBIDDEN, "Account blocked");
     }
 
     if (!user.isVerified) {
-      throw new AppError(403, "Please verify account");
+      throw new AppError(StatusCodes.FORBIDDEN, "Please verify account");
     }
 
-    // ✅ FINAL ATTACH
     req.user = {
       id: user._id,
       role: user.role,
+      subscription: user.subscription, 
     };
 
     next();

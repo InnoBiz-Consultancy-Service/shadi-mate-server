@@ -21,7 +21,7 @@ const profile_model_1 = require("../profile/profile.model");
 const notification_service_1 = require("../notification/notification.service");
 const socketSingleton_1 = require("../../../socket/handlers/socketSingleton");
 const redis_1 = __importDefault(require("../../../utils/redis"));
-// ─── Cache Keys ──────────────────────────────────────────────────────────────
+// ─── Cache Keys ───────────────────────────────────────────────────────────────
 const LIKE_COUNT_KEY = (userId) => `like:count:${userId}`;
 const LIKE_SENDERS_KEY = (userId) => `like:senders:${userId}`;
 const MY_LIKES_KEY = (userId) => `like:given:${userId}`;
@@ -37,7 +37,6 @@ const batchGetProfiles = (userIds) => __awaiter(void 0, void 0, void 0, function
     const cacheKeys = userIds.map(PROFILE_CACHE_KEY);
     let cachedValues = [];
     try {
-        // ✅ node-redis v4: mGet accepts an array
         cachedValues = yield redis_1.default.mGet(cacheKeys);
     }
     catch (_) {
@@ -65,12 +64,10 @@ const batchGetProfiles = (userIds) => __awaiter(void 0, void 0, void 0, function
             .populate("address.divisionId", "name")
             .populate("address.districtId", "name")
             .lean();
-        // ✅ node-redis v4: multi() instead of pipeline()
         const multi = redis_1.default.multi();
         for (const profile of profiles) {
             const uid = profile.userId._id.toString();
             profileMap[uid] = profile;
-            // ✅ node-redis v4: setEx (camelCase) instead of setex
             multi.setEx(PROFILE_CACHE_KEY(uid), PROFILE_CACHE_TTL, JSON.stringify(profile));
         }
         try {
@@ -102,6 +99,7 @@ const toggleLike = (fromUserId, toUserId) => __awaiter(void 0, void 0, void 0, f
     if (!targetUser) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
     }
+    // ─── existingLike check ───────────────────────────────────────────────────
     const existingLike = yield like_model_1.Like.findOne({ fromUserId, toUserId });
     let action;
     if (existingLike) {
@@ -110,9 +108,18 @@ const toggleLike = (fromUserId, toUserId) => __awaiter(void 0, void 0, void 0, f
         action = "unliked";
     }
     else {
-        // ─── Like ─────────────────────────────────────────────────────────────
-        yield like_model_1.Like.create({ fromUserId, toUserId });
+        try {
+            yield like_model_1.Like.create({ fromUserId, toUserId });
+        }
+        catch (err) {
+            if ((err === null || err === void 0 ? void 0 : err.code) === 11000) {
+                // duplicate key — already liked, action liked হিসেবেই return করো
+                return { action: "liked" };
+            }
+            throw err;
+        }
         action = "liked";
+        // ─── Notification — fire and forget ──────────────────────────────────
         try {
             const sender = yield user_model_1.User.findById(fromUserId).select("name").lean();
             const senderName = (_a = sender === null || sender === void 0 ? void 0 : sender.name) !== null && _a !== void 0 ? _a : "Someone";
@@ -151,15 +158,17 @@ const getLikeCount = (targetUserId) => __awaiter(void 0, void 0, void 0, functio
     catch (_) { }
     const count = yield like_model_1.Like.countDocuments({ toUserId: targetUserId });
     try {
-        // ✅ node-redis v4: setEx (camelCase)
         yield redis_1.default.setEx(cacheKey, LIKE_LIST_TTL, count.toString());
     }
     catch (_) { }
     return { count };
 });
-// ─── Get Who Liked Me (Premium Only) ─────────────────────────────────────────
-const getWhoLikedMe = (userId, subscription) => __awaiter(void 0, void 0, void 0, function* () {
-    if (subscription !== "premium") {
+const getWhoLikedMe = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    const user = yield user_model_1.User.findById(userId).select("subscription").lean();
+    if (!user) {
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
+    }
+    if (user.subscription !== "premium") {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Upgrade to premium to see who liked your profile");
     }
     const cacheKey = LIKE_SENDERS_KEY(userId);
@@ -183,7 +192,6 @@ const getWhoLikedMe = (userId, subscription) => __awaiter(void 0, void 0, void 0
         });
     });
     try {
-        // ✅ node-redis v4: setEx (camelCase)
         yield redis_1.default.setEx(cacheKey, LIKE_LIST_TTL, JSON.stringify(result));
     }
     catch (_) { }
@@ -212,7 +220,6 @@ const getMyLikes = (userId) => __awaiter(void 0, void 0, void 0, function* () {
         });
     });
     try {
-        // ✅ node-redis v4: setEx (camelCase)
         yield redis_1.default.setEx(cacheKey, LIKE_LIST_TTL, JSON.stringify(result));
     }
     catch (_) { }

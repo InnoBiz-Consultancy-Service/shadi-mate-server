@@ -18,7 +18,7 @@ const AppError_1 = __importDefault(require("../helpers/AppError"));
 const token_utils_1 = require("../utils/token.utils");
 const user_cache_1 = require("../app/modules/user/user.cache");
 const user_model_1 = require("../app/modules/user/user.model");
-// ─── AUTHORIZE ─────────────────────────────────────────
+// ─── AUTHORIZE ────────────────────────────────────────────────────────────────
 const authorize = (...roles) => {
     return (req, res, next) => {
         if (!req.user || !roles.includes(req.user.role)) {
@@ -28,11 +28,10 @@ const authorize = (...roles) => {
     };
 };
 exports.authorize = authorize;
-// ─── AUTHENTICATE ──────────────────────────────────────
+// ─── AUTHENTICATE ─────────────────────────────────────────────────────────────
 const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b, _c;
     try {
-        // ✅ token from header OR cookie
         const authHeader = req.headers.authorization;
         const cookieToken = (_a = req.cookies) === null || _a === void 0 ? void 0 : _a.accessToken;
         let token;
@@ -45,7 +44,7 @@ const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, func
         if (!token) {
             throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "No token provided");
         }
-        // ✅ verify token
+        // ─── Token verify ─────────────────────────────────────────────────────────
         const decoded = (0, token_utils_1.verifyAccessToken)(token);
         if (!(decoded === null || decoded === void 0 ? void 0 : decoded.id)) {
             throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Invalid token");
@@ -53,18 +52,18 @@ const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, func
         if (decoded.id === "pending") {
             throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Please verify your account first");
         }
-        // ✅ blacklist check
+        // ─── Blacklist check ──────────────────────────────────────────────────────
         const jti = token.split(".")[2];
         const blacklisted = yield (0, token_utils_1.isAccessTokenBlacklisted)(jti);
         if (blacklisted) {
             throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Token revoked. Login again");
         }
-        // ✅ cache check
+        // ─── Redis cache check ────────────────────────────────────────────────────
         let user = yield (0, user_cache_1.getCachedUser)(decoded.id);
-        // ✅ DB fallback
+        // ─── DB fallback — cache miss হলে ────────────────────────────────────────
         if (!user) {
             const dbUser = yield user_model_1.User.findById(decoded.id)
-                .select("role isVerified isBlocked isDeleted")
+                .select("role isVerified isBlocked isDeleted isProfileCompleted subscription")
                 .lean();
             if (!dbUser) {
                 throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "User not found");
@@ -75,25 +74,25 @@ const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, func
                 isVerified: dbUser.isVerified,
                 isBlocked: dbUser.isBlocked,
                 isDeleted: dbUser.isDeleted,
-                isProfileCompleted: false,
-                subscription: "free",
+                isProfileCompleted: (_b = dbUser.isProfileCompleted) !== null && _b !== void 0 ? _b : false,
+                subscription: (_c = dbUser.subscription) !== null && _c !== void 0 ? _c : "free",
             };
             yield (0, user_cache_1.setCachedUser)(user);
         }
-        // ✅ guards
+        // ─── Guards ───────────────────────────────────────────────────────────────
         if (user.isDeleted) {
-            throw new AppError_1.default(401, "Account deleted");
+            throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "Account deleted");
         }
         if (user.isBlocked) {
-            throw new AppError_1.default(403, "Account blocked");
+            throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Account blocked");
         }
         if (!user.isVerified) {
-            throw new AppError_1.default(403, "Please verify account");
+            throw new AppError_1.default(http_status_codes_1.StatusCodes.FORBIDDEN, "Please verify account");
         }
-        // ✅ FINAL ATTACH
         req.user = {
             id: user._id,
             role: user.role,
+            subscription: user.subscription,
         };
         next();
     }
