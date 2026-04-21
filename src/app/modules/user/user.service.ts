@@ -196,7 +196,7 @@ const loginUser = async (payload: TLoginInput) => {
     });
 
     if (!otpDoc) {
-        throw new AppError(StatusCodes.UNAUTHORIZED, "Account not found");
+      throw new AppError(StatusCodes.UNAUTHORIZED, "Invalid credentials");
     }
 
     if (otpDoc.expiresAt < new Date()) {

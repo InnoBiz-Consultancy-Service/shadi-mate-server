@@ -6,6 +6,7 @@ import { envVars } from "../../../config/envConfig";
 import axios from "axios";
 import { EPS_URLS, generateEPSHash, getEPSToken } from "../../../utils/epsHelper";
 import { invalidateUserCache } from "../user/user.cache"; // ✅ add
+import mongoose from "mongoose";
 
 // ─── Plan Config ──────────────────────────────────────────────────────────────
 export const PLAN_CONFIG = {
@@ -206,11 +207,13 @@ const handlePaymentSuccess = async (callbackData: any) => {
     const payment = await Payment.findOne({ merchantTransactionId });
     if (!payment) throw new AppError(StatusCodes.NOT_FOUND, "Payment record not found");
 
+    // ─── Duplicate callback guard ─────────────────────────────────────────────
     if (payment.paymentStatus === "success") {
         console.log(`⚠️ Duplicate callback: ${merchantTransactionId}`);
         return { alreadyProcessed: true };
     }
 
+    // ─── EPS verify ───────────────────────────────────────────────────────────
     const verifyResult = await verifyTransaction(merchantTransactionId);
 
     if (!verifyResult || verifyResult.Status !== "Success") {
@@ -224,26 +227,54 @@ const handlePaymentSuccess = async (callbackData: any) => {
 
     console.log(`📅 Subscription: ${startDate.toLocaleDateString()} → ${endDate.toLocaleDateString()} (${planConfig.months} month${planConfig.months > 1 ? "s" : ""})`);
 
-    const subscription = await Subscription.create({
-        userId:    payment.userId,
-        plan:      payment.plan,
-        amount:    payment.amount,
-        startDate,
-        endDate,
-        status:    "active",
-    });
+ 
+    const session = await mongoose.startSession();
 
-    await Payment.findByIdAndUpdate(payment._id, {
-        paymentStatus:    "success",
-        epsTransactionId: verifyResult.MerchantTransactionId,
-        subscriptionId:   subscription._id,
-        paidAt:           new Date(),
-    });
+    let subscription: any;
 
-    // ─── User premium করো + cache invalidate ─────────────────────────────────
+    try {
+        await session.withTransaction(async () => {
+            // ── Step 1: Subscription create ───────────────────────────────────
+            const [createdSub] = await Subscription.create(
+                [
+                    {
+                        userId:    payment.userId,
+                        plan:      payment.plan,
+                        amount:    payment.amount,
+                        startDate,
+                        endDate,
+                        status:    "active",
+                    },
+                ],
+                { session }
+            );
+            subscription = createdSub;
+
+            // ── Step 2: Payment update ────────────────────────────────────────
+            await Payment.findByIdAndUpdate(
+                payment._id,
+                {
+                    paymentStatus:    "success",
+                    epsTransactionId: verifyResult.MerchantTransactionId,
+                    subscriptionId:   createdSub._id,
+                    paidAt:           new Date(),
+                },
+                { session }
+            );
+
+            // ── Step 3: User premium করো ──────────────────────────────────────
+            await User.findByIdAndUpdate(
+                payment.userId,
+                { subscription: "premium" },
+                { session }
+            );
+        });
+    } finally {
+        await session.endSession();
+    }
+
     const userId = String(payment.userId);
-    await User.findByIdAndUpdate(userId, { subscription: "premium" });
-    await invalidateUserCache(userId); // ✅ পরের request থেকেই premium দেখাবে
+    await invalidateUserCache(userId);
 
     console.log(`✅ Premium activated: user ${userId} | ${payment.plan} | Until: ${endDate.toLocaleDateString("bn-BD")}`);
 

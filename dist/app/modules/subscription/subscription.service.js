@@ -21,6 +21,7 @@ const envConfig_1 = require("../../../config/envConfig");
 const axios_1 = __importDefault(require("axios"));
 const epsHelper_1 = require("../../../utils/epsHelper");
 const user_cache_1 = require("../user/user.cache"); // ✅ add
+const mongoose_1 = __importDefault(require("mongoose"));
 // ─── Plan Config ──────────────────────────────────────────────────────────────
 exports.PLAN_CONFIG = {
     "1month": {
@@ -189,10 +190,12 @@ const handlePaymentSuccess = (callbackData) => __awaiter(void 0, void 0, void 0,
     const payment = yield subscription_model_1.Payment.findOne({ merchantTransactionId });
     if (!payment)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Payment record not found");
+    // ─── Duplicate callback guard ─────────────────────────────────────────────
     if (payment.paymentStatus === "success") {
         console.log(`⚠️ Duplicate callback: ${merchantTransactionId}`);
         return { alreadyProcessed: true };
     }
+    // ─── EPS verify ───────────────────────────────────────────────────────────
     const verifyResult = yield verifyTransaction(merchantTransactionId);
     if (!verifyResult || verifyResult.Status !== "Success") {
         yield subscription_model_1.Payment.findByIdAndUpdate(payment._id, { paymentStatus: "failed" });
@@ -202,24 +205,38 @@ const handlePaymentSuccess = (callbackData) => __awaiter(void 0, void 0, void 0,
     const startDate = new Date();
     const endDate = addMonths(startDate, planConfig.months);
     console.log(`📅 Subscription: ${startDate.toLocaleDateString()} → ${endDate.toLocaleDateString()} (${planConfig.months} month${planConfig.months > 1 ? "s" : ""})`);
-    const subscription = yield subscription_model_1.Subscription.create({
-        userId: payment.userId,
-        plan: payment.plan,
-        amount: payment.amount,
-        startDate,
-        endDate,
-        status: "active",
-    });
-    yield subscription_model_1.Payment.findByIdAndUpdate(payment._id, {
-        paymentStatus: "success",
-        epsTransactionId: verifyResult.MerchantTransactionId,
-        subscriptionId: subscription._id,
-        paidAt: new Date(),
-    });
-    // ─── User premium করো + cache invalidate ─────────────────────────────────
+    const session = yield mongoose_1.default.startSession();
+    let subscription;
+    try {
+        yield session.withTransaction(() => __awaiter(void 0, void 0, void 0, function* () {
+            // ── Step 1: Subscription create ───────────────────────────────────
+            const [createdSub] = yield subscription_model_1.Subscription.create([
+                {
+                    userId: payment.userId,
+                    plan: payment.plan,
+                    amount: payment.amount,
+                    startDate,
+                    endDate,
+                    status: "active",
+                },
+            ], { session });
+            subscription = createdSub;
+            // ── Step 2: Payment update ────────────────────────────────────────
+            yield subscription_model_1.Payment.findByIdAndUpdate(payment._id, {
+                paymentStatus: "success",
+                epsTransactionId: verifyResult.MerchantTransactionId,
+                subscriptionId: createdSub._id,
+                paidAt: new Date(),
+            }, { session });
+            // ── Step 3: User premium করো ──────────────────────────────────────
+            yield user_model_1.User.findByIdAndUpdate(payment.userId, { subscription: "premium" }, { session });
+        }));
+    }
+    finally {
+        yield session.endSession();
+    }
     const userId = String(payment.userId);
-    yield user_model_1.User.findByIdAndUpdate(userId, { subscription: "premium" });
-    yield (0, user_cache_1.invalidateUserCache)(userId); // ✅ পরের request থেকেই premium দেখাবে
+    yield (0, user_cache_1.invalidateUserCache)(userId);
     console.log(`✅ Premium activated: user ${userId} | ${payment.plan} | Until: ${endDate.toLocaleDateString("bn-BD")}`);
     return { success: true, subscription };
 });
