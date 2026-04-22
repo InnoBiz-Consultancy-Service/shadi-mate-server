@@ -168,6 +168,7 @@ const profileSchema = new Schema(
       required: true,
       enum: Object.values(Habits),
     },
+    image: String,
   },
   {
     timestamps: true,
