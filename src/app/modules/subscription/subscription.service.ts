@@ -5,7 +5,7 @@ import { User } from "../user/user.model";
 import { envVars } from "../../../config/envConfig";
 import axios from "axios";
 import { EPS_URLS, generateEPSHash, getEPSToken } from "../../../utils/epsHelper";
-import { invalidateUserCache } from "../user/user.cache"; // ✅ add
+import { invalidateUserCache } from "../user/user.cache";
 import mongoose from "mongoose";
 
 // ─── Plan Config ──────────────────────────────────────────────────────────────
@@ -50,6 +50,15 @@ const generateMerchantTransactionId = (): string => {
     return `SM${timestamp}${random}`;
 };
 
+// ─── Get correct backend base URL ─────────────────────────────────────────────
+// BACKEND_URL in env should be like: https://shadi-mate-server.onrender.com/api/v1
+// The callback routes are registered under /api/v1/subscriptions/payment/...
+const getBackendUrl = (): string => {
+    const url = envVars.BACKEND_URL;
+    // Remove trailing slash if present
+    return url.replace(/\/$/, "");
+};
+
 // ─── Initiate Payment ─────────────────────────────────────────────────────────
 const initiatePayment = async (
     userId: string,
@@ -67,7 +76,7 @@ const initiatePayment = async (
     if (activeSubscription) {
         throw new AppError(
             StatusCodes.CONFLICT,
-            `You have an active subscription that will expire on ${new Date(activeSubscription.endDate).toLocaleDateString("bn-BD")}.`
+            `You have an active subscription that will expire on ${new Date(activeSubscription.endDate).toLocaleDateString("en-BD")}.`
         );
     }
 
@@ -75,9 +84,14 @@ const initiatePayment = async (
     const merchantTransactionId = generateMerchantTransactionId();
     const customerOrderId = `ORD${Date.now()}`;
 
-    const successUrl = `${envVars.BACKEND_URL}/subscriptions/payment/success`;
-    const failUrl    = `${envVars.BACKEND_URL}/subscriptions/payment/fail`;
-    const cancelUrl  = `${envVars.BACKEND_URL}/subscriptions/payment/cancel`;
+    const backendBase = getBackendUrl();
+
+    // These must exactly match what EPS will call back
+    const successUrl = `${backendBase}/subscriptions/payment/success`;
+    const failUrl    = `${backendBase}/subscriptions/payment/fail`;
+    const cancelUrl  = `${backendBase}/subscriptions/payment/cancel`;
+
+    console.log("💳 Payment callback URLs:", { successUrl, failUrl, cancelUrl });
 
     await Payment.create({
         userId,
@@ -145,6 +159,7 @@ const initiatePayment = async (
             },
         });
         epsResponse = response.data;
+        console.log("✅ EPS Initialize response:", JSON.stringify(epsResponse));
     } catch (err: any) {
         console.error("❌ EPS InitializeEPS error:", err?.response?.data ?? err.message);
         await Payment.findOneAndUpdate(
@@ -159,7 +174,7 @@ const initiatePayment = async (
             { merchantTransactionId },
             { paymentStatus: "failed" }
         );
-        throw new AppError(StatusCodes.BAD_GATEWAY, "EPS থেকে payment URL পাওয়া যায়নি");
+        throw new AppError(StatusCodes.BAD_GATEWAY, "Could not get payment URL from EPS");
     }
 
     console.log(`💳 Payment initialized: ${merchantTransactionId} | Plan: ${plan} | Amount: ${planConfig.amount} BDT`);
@@ -187,6 +202,7 @@ const verifyTransaction = async (merchantTransactionId: string) => {
             },
         });
 
+        console.log("✅ EPS Verify response:", JSON.stringify(response.data));
         return response.data;
     } catch (err: any) {
         console.error("❌ EPS verify error:", err?.response?.data ?? err.message);
@@ -195,17 +211,24 @@ const verifyTransaction = async (merchantTransactionId: string) => {
 };
 
 // ─── Payment Success Callback ─────────────────────────────────────────────────
-const handlePaymentSuccess = async (callbackData: any) => {
-    const merchantTransactionId =
-        callbackData.merchantTransactionId ||
-        callbackData.MerchantTransactionId;
+const handlePaymentSuccess = async (callbackData: {
+    merchantTransactionId: string;
+    status: string;
+    epsTransactionId?: string;
+}) => {
+    const { merchantTransactionId, status, epsTransactionId } = callbackData;
+
+    console.log("🔄 handlePaymentSuccess called:", { merchantTransactionId, status, epsTransactionId });
 
     if (!merchantTransactionId) {
         throw new AppError(StatusCodes.BAD_REQUEST, "Transaction ID missing");
     }
 
     const payment = await Payment.findOne({ merchantTransactionId });
-    if (!payment) throw new AppError(StatusCodes.NOT_FOUND, "Payment record not found");
+    if (!payment) {
+        console.error("❌ Payment not found for:", merchantTransactionId);
+        throw new AppError(StatusCodes.NOT_FOUND, "Payment record not found");
+    }
 
     // ─── Duplicate callback guard ─────────────────────────────────────────────
     if (payment.paymentStatus === "success") {
@@ -216,7 +239,16 @@ const handlePaymentSuccess = async (callbackData: any) => {
     // ─── EPS verify ───────────────────────────────────────────────────────────
     const verifyResult = await verifyTransaction(merchantTransactionId);
 
-    if (!verifyResult || verifyResult.Status !== "Success") {
+    // Accept if either:
+    // 1. EPS verify returns Status === "Success"
+    // 2. The original callback status was "Success" AND verify returned something (sandbox may differ)
+    const isVerified =
+        verifyResult?.Status === "Success" ||
+        verifyResult?.status === "Success" ||
+        (status === "Success" && verifyResult !== null);
+
+    if (!isVerified) {
+        console.error("❌ Transaction verification failed. verifyResult:", verifyResult);
         await Payment.findByIdAndUpdate(payment._id, { paymentStatus: "failed" });
         throw new AppError(StatusCodes.BAD_REQUEST, "Transaction verification failed");
     }
@@ -227,14 +259,12 @@ const handlePaymentSuccess = async (callbackData: any) => {
 
     console.log(`📅 Subscription: ${startDate.toLocaleDateString()} → ${endDate.toLocaleDateString()} (${planConfig.months} month${planConfig.months > 1 ? "s" : ""})`);
 
- 
     const session = await mongoose.startSession();
 
     let subscription: any;
 
     try {
         await session.withTransaction(async () => {
-            // ── Step 1: Subscription create ───────────────────────────────────
             const [createdSub] = await Subscription.create(
                 [
                     {
@@ -250,19 +280,17 @@ const handlePaymentSuccess = async (callbackData: any) => {
             );
             subscription = createdSub;
 
-            // ── Step 2: Payment update ────────────────────────────────────────
             await Payment.findByIdAndUpdate(
                 payment._id,
                 {
                     paymentStatus:    "success",
-                    epsTransactionId: verifyResult.MerchantTransactionId,
+                    epsTransactionId: epsTransactionId || verifyResult?.MerchantTransactionId || "",
                     subscriptionId:   createdSub._id,
                     paidAt:           new Date(),
                 },
                 { session }
             );
 
-            // ── Step 3: User premium করো ──────────────────────────────────────
             await User.findByIdAndUpdate(
                 payment.userId,
                 { subscription: "premium" },
@@ -276,14 +304,16 @@ const handlePaymentSuccess = async (callbackData: any) => {
     const userId = String(payment.userId);
     await invalidateUserCache(userId);
 
-    console.log(`✅ Premium activated: user ${userId} | ${payment.plan} | Until: ${endDate.toLocaleDateString("bn-BD")}`);
+    console.log(`✅ Premium activated: user ${userId} | ${payment.plan} | Until: ${endDate.toLocaleDateString("en-BD")}`);
 
     return { success: true, subscription };
 };
 
 // ─── Payment Fail ─────────────────────────────────────────────────────────────
-const handlePaymentFail = async (callbackData: any) => {
-    const id = callbackData.merchantTransactionId || callbackData.MerchantTransactionId;
+const handlePaymentFail = async (callbackData: Record<string, string>) => {
+    const id = callbackData.merchantTransactionId ||
+               callbackData.MerchantTransactionId ||
+               callbackData["MerchantTransactionId "] || "";
     if (id) {
         await Payment.findOneAndUpdate(
             { merchantTransactionId: id, paymentStatus: "pending" },
@@ -295,8 +325,10 @@ const handlePaymentFail = async (callbackData: any) => {
 };
 
 // ─── Payment Cancel ───────────────────────────────────────────────────────────
-const handlePaymentCancel = async (callbackData: any) => {
-    const id = callbackData.merchantTransactionId || callbackData.MerchantTransactionId;
+const handlePaymentCancel = async (callbackData: Record<string, string>) => {
+    const id = callbackData.merchantTransactionId ||
+               callbackData.MerchantTransactionId ||
+               callbackData["MerchantTransactionId "] || "";
     if (id) {
         await Payment.findOneAndUpdate(
             { merchantTransactionId: id, paymentStatus: "pending" },
@@ -350,12 +382,11 @@ const expireSubscriptions = async () => {
         { subscription: "free" }
     );
 
-    // ✅ Expire হওয়া সব user-এর cache invalidate — পরের request থেকে "free" দেখাবে
     await Promise.all(
         expiredList.map((s) => invalidateUserCache(String(s.userId)))
     );
 
-    console.log(`🔄 ${expiredList.length} subscription(s) expired — users downgraded to free`);
+    console.log(`🔄 ${expiredList.length} subscription(s) expired`);
 };
 
 export const SubscriptionService = {

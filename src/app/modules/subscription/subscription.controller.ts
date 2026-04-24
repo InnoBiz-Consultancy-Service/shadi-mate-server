@@ -46,39 +46,89 @@ const initiatePayment = catchAsync(async (req: Request, res: Response) => {
     });
 });
 
+// ─── Helper: Parse EPS callback data (handles spaces in query params) ──────────
+// EPS sandbox sends malformed query strings like:
+// EPSTransactionId%20=%20A261517110424A%20&%20ErrorCode=
+// We need to manually parse this
+const parseEPSCallbackData = (req: Request): Record<string, string> => {
+    const result: Record<string, string> = {};
+
+    // First collect from req.body and req.query (standard parsed values)
+    for (const [key, val] of Object.entries({ ...req.body, ...req.query })) {
+        const cleanKey = String(key).trim();
+        const cleanVal = String(val ?? "").trim();
+        if (cleanKey) result[cleanKey] = cleanVal;
+    }
+
+    // Also manually parse the raw query string to catch EPS's malformed params
+    // e.g. "EPSTransactionId%20=%20A261517" → key="EPSTransactionId", val="A261517"
+    try {
+        const rawUrl = req.url || "";
+        const queryStart = rawUrl.indexOf("?");
+        if (queryStart !== -1) {
+            const rawQuery = rawUrl.slice(queryStart + 1);
+            // Decode first, then split
+            const decoded = decodeURIComponent(rawQuery);
+            // Split by & (may have spaces around it)
+            const parts = decoded.split(/\s*&\s*/);
+            for (const part of parts) {
+                // Split by = (may have spaces around it)
+                const eqIdx = part.indexOf("=");
+                if (eqIdx === -1) continue;
+                const k = part.slice(0, eqIdx).trim();
+                const v = part.slice(eqIdx + 1).trim();
+                if (k) result[k] = v;
+            }
+        }
+    } catch (_) {
+        // ignore parse errors, fallback to req.query is fine
+    }
+
+    return result;
+};
+
 // ─── Payment Success Callback ─────────────────────────────────────────────────
 const paymentSuccess = catchAsync(async (req: Request, res: Response) => {
-    const callbackData = { ...req.body, ...req.query };
+    const callbackData = parseEPSCallbackData(req);
 
-    console.log("✅ EPS Success Callback Hit:", callbackData);
+    console.log("✅ EPS Success Callback - Parsed Data:", callbackData);
 
+    // Normalize: EPS may send Status or status
     const normalizedData = {
         merchantTransactionId:
+            callbackData.MerchantTransactionId ||
             callbackData.merchantTransactionId ||
-            callbackData.MerchantTransactionId,
+            callbackData["MerchantTransactionId "] || // trailing space variant
+            "",
         status:
             callbackData.Status ||
-            callbackData.status,
+            callbackData.status ||
+            "",
         epsTransactionId:
             callbackData.EPSTransactionId ||
-            callbackData.epsTransactionId,
+            callbackData.epsTransactionId ||
+            callbackData["EPSTransactionId "] || // trailing space variant
+            "",
     };
 
-    // Path parameter ব্যবহার না করে শুধু query parameter দিয়ে redirect
+    console.log("✅ Normalized payment data:", normalizedData);
+
     const tranId = normalizedData.merchantTransactionId || "unknown";
+
+    if (!normalizedData.merchantTransactionId) {
+        console.error("❌ No merchantTransactionId found in callback:", callbackData);
+        return res.redirect(`${envVars.FRONTEND_URL}/paymentFail?reason=missing_transaction_id`);
+    }
 
     try {
         const result = await SubscriptionService.handlePaymentSuccess(normalizedData);
-console.log( `${envVars.FRONTEND_URL}/paymentSuccess?tran_id=${tranId}` );
 
-        // Already processed
         if (result?.alreadyProcessed) {
             return res.redirect(
                 `${envVars.FRONTEND_URL}/paymentSuccess?status=already_processed`
             );
         }
 
-        // ✅ SUCCESS redirect
         return res.redirect(
             `${envVars.FRONTEND_URL}/paymentSuccess?tran_id=${tranId}`
         );
@@ -87,16 +137,19 @@ console.log( `${envVars.FRONTEND_URL}/paymentSuccess?tran_id=${tranId}` );
         return res.redirect(`${envVars.FRONTEND_URL}/paymentFail?tran_id=${tranId}`);
     }
 });
+
 // ─── Payment Fail Callback ────────────────────────────────────────────────────
 const paymentFail = catchAsync(async (req: Request, res: Response) => {
-    const callbackData = { ...req.body, ...req.query };
+    const callbackData = parseEPSCallbackData(req);
+    console.log("❌ EPS Fail Callback:", callbackData);
     await SubscriptionService.handlePaymentFail(callbackData);
     res.redirect(`${envVars.FRONTEND_URL}/paymentFail`);
 });
 
 // ─── Payment Cancel Callback ──────────────────────────────────────────────────
 const paymentCancel = catchAsync(async (req: Request, res: Response) => {
-    const callbackData = { ...req.body, ...req.query };
+    const callbackData = parseEPSCallbackData(req);
+    console.log("🚫 EPS Cancel Callback:", callbackData);
     await SubscriptionService.handlePaymentCancel(callbackData);
     res.redirect(`${envVars.FRONTEND_URL}/paymentCancel`);
 });
