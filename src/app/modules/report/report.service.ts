@@ -93,7 +93,7 @@ const notifyAdmins = async (
                 },
             });
 
-            const adminSocketId = await redisClient.hget("onlineUsers", adminId);
+            const adminSocketId = await redisClient.hGet("onlineUsers", adminId);
             if (adminSocketId) {
                 io.to(String(adminSocketId)).emit("new-report", {
                     _id: notification._id,

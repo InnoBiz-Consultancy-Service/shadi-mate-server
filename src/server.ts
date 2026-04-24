@@ -9,6 +9,7 @@ import { connectRedis } from "./utils/redis";
 import { seedSuperAdmin } from "./seeders/seedSuperAdmin";
 import { seedGeoData } from "./seeders/seedGeoData";
 import { seedPersonalityQuestions } from "./seeders/seedPersonalityQuestions";
+import { startSubscriptionCron } from "./utils/subscriptioncron";
 
 const startServer = async () => {
     try {
@@ -31,6 +32,7 @@ const startServer = async () => {
         seedSuperAdmin();
         seedGeoData();
         seedPersonalityQuestions();
+        startSubscriptionCron();
 
     } catch (err) {
         console.error("❌ Server error:", err);
