@@ -10,7 +10,6 @@ import { ProfileVisitService } from "../profileVisit/profileVisit.service";
 import { Types } from "mongoose";
 import { DreamPartnerService } from "../dreamPartner/dreamPartner.service";
 
-// ─── Profile Completion Check (boolean — isProfileCompleted flag এর জন্য) ─────
 const checkProfileCompletion = (profile: any) => {
     return !!(
         profile.gender &&
@@ -39,7 +38,6 @@ const createProfile = async (userId: string, payload: any) => {
     // ─── Cache invalidate ─────────────────────────────────────────────────────
     await invalidateProfileCache(userId);
 
-    // 🔥🔥🔥 ADD THIS BLOCK ONLY
     try {
         await DreamPartnerService.notifyMatchingUsers(profile);
     } catch (err) {
@@ -79,7 +77,8 @@ const getProfiles = async (
         practiceLevel?: string;
         personality?: string;
         habits?: string[];
-    }
+    },
+    currentUserId: string // ✅ নতুন parameter
 ) => {
     const {
         search,
@@ -111,6 +110,9 @@ const getProfiles = async (
     ];
 
     builder.addLookups(lookups);
+
+    // ✅ নিজের profile exclude করো
+    builder.addMatch("userId", { $ne: new Types.ObjectId(currentUserId) });
 
     builder
         .addRegexMatch("university.name", university as string)
@@ -183,14 +185,12 @@ const getMyProfile = async (userId: string) => {
 };
 
 export const getProfileByUserIdFromDB = async (userId: string) => {
-  // 🔒 Validate ObjectId
   if (!Types.ObjectId.isValid(userId)) {
     throw new AppError(StatusCodes.BAD_REQUEST, "Invalid user ID");
   }
 
-  // 🔥 মূল fix — userId দিয়ে profile খোঁজা
   const profile = await Profile.findOne({ userId })
-    .populate("userId", "name email") // optional
+    .populate("userId", "name email")
     .lean();
 
   if (!profile) {
@@ -206,5 +206,4 @@ export const ProfileService = {
     getProfiles,
     getMyProfile,
     getProfileByUserIdFromDB
-
 };
