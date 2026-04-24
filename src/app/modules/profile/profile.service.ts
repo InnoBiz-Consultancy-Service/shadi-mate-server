@@ -8,6 +8,7 @@ import { invalidateProfileCache } from "../like/like.servce";
 import { calculateCompletionPercentage, getCompletionLabel } from "./profileCompletaion";
 import { ProfileVisitService } from "../profileVisit/profileVisit.service";
 import { Types } from "mongoose";
+import { DreamPartnerService } from "../dreamPartner/dreamPartner.service";
 
 // ─── Profile Completion Check (boolean — isProfileCompleted flag এর জন্য) ─────
 const checkProfileCompletion = (profile: any) => {
@@ -37,6 +38,13 @@ const createProfile = async (userId: string, payload: any) => {
 
     // ─── Cache invalidate ─────────────────────────────────────────────────────
     await invalidateProfileCache(userId);
+
+    // 🔥🔥🔥 ADD THIS BLOCK ONLY
+    try {
+        await DreamPartnerService.notifyMatchingUsers(profile);
+    } catch (err) {
+        console.log("❌ match email error:", err);
+    }
 
     return profile;
 };

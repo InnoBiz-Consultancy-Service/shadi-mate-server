@@ -6,8 +6,7 @@ import { Notification } from "../app/modules/notification/notification.model";
 import { getIO } from "../socket/handlers/socketSingleton";
 import redisClient from "./redis";
 
-// ─── Redis Key ────────────────────────────────────────────────────────────────
-// প্রতিদিন একবারই notification যাবে — Redis দিয়ে track করবো
+
 
 const REMINDER_KEY = (userId: string) => `sub:reminder:${userId}`;
 const REMINDER_TTL = 60 * 60 * 25; // 25 ঘন্টা
@@ -47,7 +46,7 @@ const sendExpiryReminder = async (
         // ─── Realtime Socket notification পাঠাও ──────────────────────────────
         try {
             const io = getIO();
-            const receiverSocketId = await redisClient.hget("onlineUsers", userId);
+            const receiverSocketId = await redisClient.hGet("onlineUsers", userId);
 
             if (receiverSocketId) {
                 io.to(String(receiverSocketId)).emit("new-notification", {

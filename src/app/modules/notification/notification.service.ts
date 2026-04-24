@@ -11,13 +11,12 @@ const getNotificationMessage = (
 ): string => {
     switch (type) {
         case "new_message":
-            return `${senderName} Send you a new message`;
+            return `${senderName} sent you a new message`;
         case "like":
             return `${senderName} liked your profile`;
         case "profile_visit":
             return `${senderName} visited your profile`;
         case "subscription_expiry_reminder":
-            // Cron job থেকে directly message পাঠানো হয় — এখানে fallback
             return metadata?.daysLeft === 1
                 ? `Your Premium subscription expires tomorrow (${metadata?.endDate ? new Date(metadata.endDate).toLocaleDateString("en-US") : ""}). Renew now.`
                 : `Your Premium subscription ${metadata?.daysLeft ?? ""} days left.`;
@@ -26,8 +25,7 @@ const getNotificationMessage = (
     }
 };
 
-// ─── Create & Deliver Notification ───────────────────────────────────────────
-// io এবং redisClient বাইরে থেকে পাস — circular import এড়াতে
+// ─── Create & Deliver ─────────────────────────────────────────────────────────
 const createAndDeliver = async ({
     io,
     redisClient,
@@ -45,7 +43,7 @@ const createAndDeliver = async ({
     senderName: string;
     type: TNotificationType;
     metadata?: INotificationMetadata;
-    customMessage?: string; // subscription reminder এ custom message পাঠাতে
+    customMessage?: string;
 }) => {
     const message = customMessage ?? getNotificationMessage(type, senderName, metadata);
 
@@ -59,10 +57,14 @@ const createAndDeliver = async ({
         metadata,
     });
 
-    // ─── Receiver online আছে কিনা check করো ─────────────────────────────────
-const receiverSocketId = await redisClient.hGet("onlineUsers", recipientId);
+    // ─── Debug logs ───────────────────────────────────────────────────────────
+    console.log("🔔 Checking socket for recipientId:", recipientId);
+    const receiverSocketId = await redisClient.hGet("onlineUsers", recipientId);
+    console.log("🔔 Found socketId:", receiverSocketId);
+
+    // ─── Receiver online থাকলে emit করো ──────────────────────────────────────
     if (receiverSocketId) {
-        io.to(receiverSocketId).emit("new-notification", {
+        io.to(String(receiverSocketId)).emit("new-notification", {
             _id:       notification._id,
             type,
             message,
@@ -119,7 +121,7 @@ const markAsRead = async (notificationId: string, userId: string) => {
     return notification;
 };
 
-// ─── Mark All as Read ────────────────────────────────────────────────────────
+// ─── Mark All as Read ─────────────────────────────────────────────────────────
 const markAllAsRead = async (userId: string) => {
     await Notification.updateMany(
         { recipientId: userId, isRead: false },

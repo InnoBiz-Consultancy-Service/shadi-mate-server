@@ -9,7 +9,6 @@ import { setIO } from "./handlers/socketSingleton";
 
 export const initSocket = (io: Server) => {
 
-    // ─── Singleton set — সব service getIO() দিয়ে নেবে ──────────────────────
     setIO(io);
 
     io.on("connection", async (socket: Socket) => {
@@ -21,9 +20,7 @@ export const initSocket = (io: Server) => {
         typingHandler(io, socket);
         seenHandler(io, socket);
 
-        // ─── Pending Notifications ────────────────────────────────────────────
-        // User connect হলে তার সব unread notifications পাঠাও
-        // Offline থাকার সময়ের message, like, visit, reminder সব পাবে
+    
         const userId = socket.handshake.query.userId as string;
 
         if (userId) {

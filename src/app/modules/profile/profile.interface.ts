@@ -23,6 +23,8 @@ export enum EconomicalStatus {
     LOW = "Low",
     MEDIUM = "Medium",
     HIGH = "High",
+    MIDDLE_CLASS = "Middle Class",
+    UPPER_MIDDLE_CLASS = "Upper Middle Class",
 }
 
 export interface QueryParams {
@@ -54,6 +56,7 @@ export enum Habits {
     ENTREPRENEURSHIP = "Entrepreneurship",
     TECHNOLOGY = "Technology",
     OTHERS = "others",
+    MUSIC = "Music",
 }
 export interface IProfileVisit extends Document {
     _id: Types.ObjectId;
