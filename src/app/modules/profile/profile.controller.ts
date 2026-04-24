@@ -39,7 +39,9 @@ const updateProfile = catchAsync(async (req: Request, res: Response) => {
 
 const getProfiles = catchAsync(async (req: Request, res: Response) => {
 
-    const result = await ProfileService.getProfiles(req.query);
+    const userId = req.user!.id; 
+
+    const result = await ProfileService.getProfiles(req.query, userId);
 
     sendResponse(res, {
         statusCode: StatusCodes.OK,
