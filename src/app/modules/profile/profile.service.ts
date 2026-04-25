@@ -6,7 +6,6 @@ import { AggregationBuilder } from "../../../utils/profileQueryBuilder";
 import { QueryParams } from "./profile.interface";
 import { invalidateProfileCache } from "../like/like.servce";
 import { calculateCompletionPercentage, getCompletionLabel } from "./profileCompletaion";
-import { ProfileVisitService } from "../profileVisit/profileVisit.service";
 import { Types } from "mongoose";
 import { DreamPartnerService } from "../dreamPartner/dreamPartner.service";
 
@@ -49,20 +48,25 @@ const createProfile = async (userId: string, payload: any) => {
 
 // ─── Update Profile ───────────────────────────────────────────────────────────
 const updateProfile = async (userId: string, payload: any) => {
+
+    const updateData = { ...payload };
+
+    // ❗ undefined field remove করো
+    Object.keys(updateData).forEach((key) => {
+        if (updateData[key] === undefined) {
+            delete updateData[key];
+        }
+    });
+
     const profile = await Profile.findOneAndUpdate(
         { userId },
-        payload,
+        updateData,
         { new: true, runValidators: true }
     );
 
     if (!profile) {
         throw new AppError(StatusCodes.NOT_FOUND, "Profile not found");
     }
-
-    const completed = checkProfileCompletion(profile);
-    await User.findByIdAndUpdate(userId, { isProfileCompleted: completed });
-
-    await invalidateProfileCache(userId);
 
     return profile;
 };
@@ -111,7 +115,6 @@ const getProfiles = async (
 
     builder.addLookups(lookups);
 
-    // ✅ নিজের profile exclude করো
     builder.addMatch("userId", { $ne: new Types.ObjectId(currentUserId) });
 
     builder
