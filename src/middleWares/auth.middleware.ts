@@ -17,7 +17,8 @@ declare global {
     interface UserPayload {
       id: string;
       role: string;
-      subscription: string; 
+      subscription: string;
+      gender: string; 
     }
 
     interface Request {
@@ -25,7 +26,6 @@ declare global {
     }
   }
 }
-
 // ─── AUTHORIZE ────────────────────────────────────────────────────────────────
 export const authorize = (...roles: string[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -94,7 +94,7 @@ const authenticate = async (
     // ─── DB fallback — cache miss হলে ────────────────────────────────────────
     if (!user) {
       const dbUser = await User.findById(decoded.id)
-        .select("role isVerified isBlocked isDeleted isProfileCompleted subscription")
+        .select("role isVerified isBlocked isDeleted isProfileCompleted subscription gender")
         .lean();
 
       if (!dbUser) {
@@ -109,6 +109,7 @@ const authenticate = async (
         isDeleted: dbUser.isDeleted,
         isProfileCompleted: dbUser.isProfileCompleted ?? false, 
         subscription: dbUser.subscription ?? "free",         
+        gender: dbUser.gender ?? "",
       };
 
       await setCachedUser(user);
@@ -131,6 +132,7 @@ const authenticate = async (
       id: user._id,
       role: user.role,
       subscription: user.subscription, 
+      gender: user.gender  as string
     };
 
     next();

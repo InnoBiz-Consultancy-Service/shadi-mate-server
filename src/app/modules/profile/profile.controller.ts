@@ -37,19 +37,21 @@ const updateProfile = catchAsync(async (req: Request, res: Response) => {
 
 // ─── Get Profiles (Search + Filter) ─────────────────
 
+// profile.controller.ts
 const getProfiles = catchAsync(async (req: Request, res: Response) => {
-
-    const userId = req.user!.id; 
-
-    const result = await ProfileService.getProfiles(req.query, userId);
-
-    sendResponse(res, {
-        statusCode: StatusCodes.OK,
-        success: true,
-        message: "Profiles retrieved successfully",
-        data: result
-    });
-
+     console.log("👉 req.user:", req.user); // FULL USER
+  console.log("👉 gender:", req.user?.gender); 
+  const result = await ProfileService.getProfiles(
+    req.query as any,
+    req.user?.id!,
+    req.user?.gender || "",
+  );
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Profiles fetched successfully",
+    data: result,
+  });
 });
 // ─── Get My Profile ─────────────────────────
 const getMyProfile = catchAsync(async (req: Request, res: Response) => {

@@ -13,6 +13,7 @@ export type TCachedUser = {
     subscription: string;
     isBlocked: boolean;
     isDeleted: boolean;
+    gender?: string;
 };
 
 // ─── Get Cached User ──────────────────────────────────────────────────────────

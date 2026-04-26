@@ -43,7 +43,6 @@ const verifyOtp = catchAsync(async (req: Request, res: Response) => {
         message: result.message,
         data: {
             accessToken: result.accessToken,
-            user: result.user,
         },
     });
 });
@@ -111,7 +110,6 @@ const resetPassword = catchAsync(async (req: Request, res: Response) => {
         message: result.message,
         data: {
             accessToken: result.accessToken,
-            user: result.user,
         },
     });
 });
