@@ -15,14 +15,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.presenceHandler = void 0;
 const socket_auth_1 = require("../../utils/socket.auth");
 const redis_1 = __importDefault(require("../../utils/redis"));
+const socketSingleton_1 = require("./socketSingleton");
 const presenceHandler = (socket) => {
     var _a;
-    const token = socket.handshake.query.token;
-    if (!token) {
+    const raw = socket.handshake.query.token;
+    if (!raw) {
         socket.emit("unauthorized", { message: "No token provided" });
         socket.disconnect();
         return;
     }
+    const token = raw.startsWith("Bearer ") ? raw.slice(7) : raw;
     const decoded = (0, socket_auth_1.verifyToken)(token);
     if (!decoded) {
         socket.emit("unauthorized", { message: "Invalid or expired token" });
@@ -31,16 +33,25 @@ const presenceHandler = (socket) => {
     }
     socket.data.userId = decoded.id;
     socket.data.subscription = (_a = decoded.subscription) !== null && _a !== void 0 ? _a : "free";
-    // FIX: hset → hSet (node-redis v4)
-    // Connect এর সময়ই set করো — পুরনো stale entry overwrite হবে
     redis_1.default.hSet("onlineUsers", decoded.id, socket.id);
     console.log(`🟢 User ${decoded.id} is online (subscription: ${socket.data.subscription})`);
+    // ✅ সব online user কে জানাও এই user online হয়েছে
+    socket.broadcast.emit("user-online", decoded.id);
+    // ✅ এই user কে জানাও কোন কোন user এখন online আছে
+    redis_1.default.hGetAll("onlineUsers").then((onlineUsers) => {
+        const onlineUserIds = Object.keys(onlineUsers).filter((id) => id !== decoded.id);
+        socket.emit("online-users", onlineUserIds);
+    });
     socket.on("disconnect", () => __awaiter(void 0, void 0, void 0, function* () {
-        // FIX: hdel → hDel (node-redis v4)
-        // শুধু এই socket এর entry মুছো — same user অন্য tab এ থাকলে সমস্যা নেই
         const current = yield redis_1.default.hGet("onlineUsers", decoded.id);
         if (current === socket.id) {
             yield redis_1.default.hDel("onlineUsers", decoded.id);
+            // ✅ সব user কে জানাও এই user offline হয়েছে
+            const io = (0, socketSingleton_1.getIO)();
+            io.emit("user-offline", {
+                userId: decoded.id,
+                lastSeen: new Date().toISOString(),
+            });
         }
         console.log(`🔴 User ${decoded.id} offline`);
     }));

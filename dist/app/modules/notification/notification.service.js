@@ -21,13 +21,12 @@ const getNotificationMessage = (type, senderName, metadata) => {
     var _a;
     switch (type) {
         case "new_message":
-            return `${senderName} Send you a new message`;
+            return `${senderName} sent you a new message`;
         case "like":
             return `${senderName} liked your profile`;
         case "profile_visit":
             return `${senderName} visited your profile`;
         case "subscription_expiry_reminder":
-            // Cron job থেকে directly message পাঠানো হয় — এখানে fallback
             return (metadata === null || metadata === void 0 ? void 0 : metadata.daysLeft) === 1
                 ? `Your Premium subscription expires tomorrow (${(metadata === null || metadata === void 0 ? void 0 : metadata.endDate) ? new Date(metadata.endDate).toLocaleDateString("en-US") : ""}). Renew now.`
                 : `Your Premium subscription ${(_a = metadata === null || metadata === void 0 ? void 0 : metadata.daysLeft) !== null && _a !== void 0 ? _a : ""} days left.`;
@@ -35,8 +34,7 @@ const getNotificationMessage = (type, senderName, metadata) => {
             return "You have a new notification";
     }
 };
-// ─── Create & Deliver Notification ───────────────────────────────────────────
-// io এবং redisClient বাইরে থেকে পাস — circular import এড়াতে
+// ─── Create & Deliver ─────────────────────────────────────────────────────────
 const createAndDeliver = (_a) => __awaiter(void 0, [_a], void 0, function* ({ io, redisClient, recipientId, senderId, senderName, type, metadata = {}, customMessage, }) {
     const message = customMessage !== null && customMessage !== void 0 ? customMessage : getNotificationMessage(type, senderName, metadata);
     // ─── DB তে save করো (offline support) ────────────────────────────────────
@@ -48,10 +46,13 @@ const createAndDeliver = (_a) => __awaiter(void 0, [_a], void 0, function* ({ io
         isRead: false,
         metadata,
     });
-    // ─── Receiver online আছে কিনা check করো ─────────────────────────────────
+    // ─── Debug logs ───────────────────────────────────────────────────────────
+    console.log("🔔 Checking socket for recipientId:", recipientId);
     const receiverSocketId = yield redisClient.hGet("onlineUsers", recipientId);
+    console.log("🔔 Found socketId:", receiverSocketId);
+    // ─── Receiver online থাকলে emit করো ──────────────────────────────────────
     if (receiverSocketId) {
-        io.to(receiverSocketId).emit("new-notification", {
+        io.to(String(receiverSocketId)).emit("new-notification", {
             _id: notification._id,
             type,
             message,
@@ -96,7 +97,7 @@ const markAsRead = (notificationId, userId) => __awaiter(void 0, void 0, void 0,
     }
     return notification;
 });
-// ─── Mark All as Read ────────────────────────────────────────────────────────
+// ─── Mark All as Read ─────────────────────────────────────────────────────────
 const markAllAsRead = (userId) => __awaiter(void 0, void 0, void 0, function* () {
     yield notification_model_1.Notification.updateMany({ recipientId: userId, isRead: false }, { isRead: true });
     return { message: "All notifications marked as read" };

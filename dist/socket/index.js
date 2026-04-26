@@ -17,7 +17,6 @@ const seen_handlers_1 = require("./handlers/seen.handlers");
 const notification_model_1 = require("../app/modules/notification/notification.model");
 const socketSingleton_1 = require("./handlers/socketSingleton");
 const initSocket = (io) => {
-    // ─── Singleton set — সব service getIO() দিয়ে নেবে ──────────────────────
     (0, socketSingleton_1.setIO)(io);
     io.on("connection", (socket) => __awaiter(void 0, void 0, void 0, function* () {
         console.log("🔥 User connected:", socket.id);
@@ -26,9 +25,6 @@ const initSocket = (io) => {
         (0, chat_handlers_1.chatHandler)(socket);
         (0, typing_handlers_1.typingHandler)(io, socket);
         (0, seen_handlers_1.seenHandler)(io, socket);
-        // ─── Pending Notifications ────────────────────────────────────────────
-        // User connect হলে তার সব unread notifications পাঠাও
-        // Offline থাকার সময়ের message, like, visit, reminder সব পাবে
         const userId = socket.handshake.query.userId;
         if (userId) {
             try {

@@ -19,23 +19,75 @@ const sendResponse_1 = require("../../../utils/sendResponse");
 const subscription_service_1 = require("./subscription.service");
 const envConfig_1 = require("../../../config/envConfig");
 const AppError_1 = __importDefault(require("../../../helpers/AppError"));
-// ─── Get Plans ────────────────────────────────────────────────────────────────
+const currency_1 = require("../../../utils/currency");
+// ─── Real IP বের করা ──────────────────────────────────────────────────────────
+const getClientIP = (req) => {
+    var _a;
+    const forwarded = req.headers["x-forwarded-for"];
+    if (forwarded) {
+        return (typeof forwarded === "string" ? forwarded : forwarded[0]).split(",")[0].trim();
+    }
+    return ((_a = req.socket) === null || _a === void 0 ? void 0 : _a.remoteAddress) || req.ip || "127.0.0.1";
+};
+// ─── GET /api/v1/subscriptions/plans ─────────────────────────────────────────
 const getPlans = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const plans = Object.entries(subscription_service_1.PLAN_CONFIG).map(([key, value]) => ({
-        plan: key,
-        label: value.label,
-        amount: value.amount,
-        months: value.months,
-        currency: "BDT",
-    }));
+    const ip = getClientIP(req);
+    const countryCode = yield (0, currency_1.getCountryFromIP)(ip);
+    const currency = (0, currency_1.getCurrencyByCountry)(countryCode); // BD=BDT, else=GBP
+    // Plans build করো
+    const plans = yield Promise.all(Object.entries(subscription_service_1.PLAN_CONFIG).map((_a) => __awaiter(void 0, [_a], void 0, function* ([key, value]) {
+        // BD হলে BDT তেই দেখাও, অন্য country হলে GBP এ convert করো
+        if (currency.code === "BDT") {
+            return {
+                plan: key,
+                label: value.label,
+                months: value.months,
+                amountBDT: value.amount,
+                amountConverted: value.amount,
+                amountFormatted: `৳${value.amount.toLocaleString()}`,
+                currency,
+                exchangeRate: 1,
+                chargeNote: null,
+            };
+        }
+        // GBP convert
+        const { converted, formatted, rate } = yield (0, currency_1.convertBDTtoGBP)(value.amount);
+        return {
+            plan: key,
+            label: value.label,
+            months: value.months,
+            amountBDT: value.amount, // actual EPS charge
+            amountConverted: converted, // display only
+            amountFormatted: formatted, // e.g. "£2.16"
+            currency,
+            exchangeRate: rate,
+            chargeNote: `Approximate price. Charged as ৳${value.amount} BDT via payment gateway`,
+        };
+    })));
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.OK,
         success: true,
         message: "Subscription plans fetched",
-        data: plans,
+        data: {
+            plans,
+            detectedCountry: countryCode,
+            detectedCurrency: currency,
+        },
     });
 }));
-// ─── Initiate Payment ─────────────────────────────────────────────────────────
+// ─── GET /api/v1/subscriptions/currency ──────────────────────────────────────
+const getUserCurrency = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const ip = getClientIP(req);
+    const countryCode = yield (0, currency_1.getCountryFromIP)(ip);
+    const currency = (0, currency_1.getCurrencyByCountry)(countryCode);
+    (0, sendResponse_1.sendResponse)(res, {
+        statusCode: http_status_codes_1.StatusCodes.OK,
+        success: true,
+        message: "Currency info fetched",
+        data: { countryCode, currency, isBDT: currency.code === "BDT" },
+    });
+}));
+// ─── POST /api/v1/subscriptions/initiate ─────────────────────────────────────
 const initiatePayment = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = req.user.id;
     const { plan } = req.body;
@@ -50,28 +102,56 @@ const initiatePayment = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(voi
         data: result,
     });
 }));
-// ─── Payment Success Callback ─────────────────────────────────────────────────
+// ─── EPS Callback Helper ──────────────────────────────────────────────────────
+const parseEPSCallbackData = (req) => {
+    const result = {};
+    for (const [key, val] of Object.entries(Object.assign(Object.assign({}, req.body), req.query))) {
+        const cleanKey = String(key).trim();
+        const cleanVal = String(val !== null && val !== void 0 ? val : "").trim();
+        if (cleanKey)
+            result[cleanKey] = cleanVal;
+    }
+    try {
+        const rawUrl = req.url || "";
+        const queryStart = rawUrl.indexOf("?");
+        if (queryStart !== -1) {
+            const decoded = decodeURIComponent(rawUrl.slice(queryStart + 1));
+            for (const part of decoded.split(/\s*&\s*/)) {
+                const eqIdx = part.indexOf("=");
+                if (eqIdx === -1)
+                    continue;
+                const k = part.slice(0, eqIdx).trim();
+                const v = part.slice(eqIdx + 1).trim();
+                if (k)
+                    result[k] = v;
+            }
+        }
+    }
+    catch (_) { }
+    return result;
+};
+// ─── Payment Callbacks (unchanged) ───────────────────────────────────────────
 const paymentSuccess = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const callbackData = Object.assign(Object.assign({}, req.body), req.query);
-    console.log("✅ EPS Success Callback Hit:", callbackData);
+    const callbackData = parseEPSCallbackData(req);
+    console.log("✅ EPS Success Callback:", callbackData);
     const normalizedData = {
-        merchantTransactionId: callbackData.merchantTransactionId ||
-            callbackData.MerchantTransactionId,
-        status: callbackData.Status ||
-            callbackData.status,
+        merchantTransactionId: callbackData.MerchantTransactionId ||
+            callbackData.merchantTransactionId ||
+            callbackData["MerchantTransactionId "] || "",
+        status: callbackData.Status || callbackData.status || "",
         epsTransactionId: callbackData.EPSTransactionId ||
-            callbackData.epsTransactionId,
+            callbackData.epsTransactionId ||
+            callbackData["EPSTransactionId "] || "",
     };
-    // Path parameter ব্যবহার না করে শুধু query parameter দিয়ে redirect
     const tranId = normalizedData.merchantTransactionId || "unknown";
+    if (!normalizedData.merchantTransactionId) {
+        return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/paymentFail?reason=missing_transaction_id`);
+    }
     try {
         const result = yield subscription_service_1.SubscriptionService.handlePaymentSuccess(normalizedData);
-        console.log(`${envConfig_1.envVars.FRONTEND_URL}/paymentSuccess?tran_id=${tranId}`);
-        // Already processed
         if (result === null || result === void 0 ? void 0 : result.alreadyProcessed) {
             return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/paymentSuccess?status=already_processed`);
         }
-        // ✅ SUCCESS redirect
         return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/paymentSuccess?tran_id=${tranId}`);
     }
     catch (err) {
@@ -79,19 +159,16 @@ const paymentSuccess = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void
         return res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/paymentFail?tran_id=${tranId}`);
     }
 }));
-// ─── Payment Fail Callback ────────────────────────────────────────────────────
 const paymentFail = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const callbackData = Object.assign(Object.assign({}, req.body), req.query);
+    const callbackData = parseEPSCallbackData(req);
     yield subscription_service_1.SubscriptionService.handlePaymentFail(callbackData);
     res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/paymentFail`);
 }));
-// ─── Payment Cancel Callback ──────────────────────────────────────────────────
 const paymentCancel = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const callbackData = Object.assign(Object.assign({}, req.body), req.query);
+    const callbackData = parseEPSCallbackData(req);
     yield subscription_service_1.SubscriptionService.handlePaymentCancel(callbackData);
     res.redirect(`${envConfig_1.envVars.FRONTEND_URL}/paymentCancel`);
 }));
-// ─── Get My Subscription ──────────────────────────────────────────────────────
 const getMySubscription = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = req.user.id;
     const result = yield subscription_service_1.SubscriptionService.getMySubscription(userId);
@@ -102,7 +179,6 @@ const getMySubscription = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(v
         data: result,
     });
 }));
-// ─── Get Payment History ──────────────────────────────────────────────────────
 const getMyPaymentHistory = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const userId = req.user.id;
     const page = parseInt(req.query.page) || 1;
@@ -118,6 +194,7 @@ const getMyPaymentHistory = (0, catchAsync_1.catchAsync)((req, res) => __awaiter
 }));
 exports.SubscriptionController = {
     getPlans,
+    getUserCurrency,
     initiatePayment,
     paymentSuccess,
     paymentFail,

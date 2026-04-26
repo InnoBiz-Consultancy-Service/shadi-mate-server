@@ -140,6 +140,7 @@ const profileSchema = new mongoose_1.Schema({
         required: true,
         enum: Object.values(profile_interface_1.Habits),
     },
+    image: String,
 }, {
     timestamps: true,
 });
