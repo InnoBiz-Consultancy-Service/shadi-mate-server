@@ -72,89 +72,90 @@ const updateProfile = async (userId: string, payload: any) => {
 };
 
 // ─── Get Profiles (Search + Filter) ──────────────────────────────────────────
+// profile.service.ts
 const getProfiles = async (
-    query: QueryParams & {
-        minAge?: number;
-        maxAge?: number;
-        educationVariety?: string;
-        faith?: string;
-        practiceLevel?: string;
-        personality?: string;
-        habits?: string[];
-    },
-    currentUserId: string // ✅ নতুন parameter
+  query: QueryParams & {
+    minAge?: number;
+    maxAge?: number;
+    educationVariety?: string;
+    faith?: string;
+    practiceLevel?: string;
+    personality?: string;
+    habits?: string[];
+  },
+  currentUserId: string,
+  currentUserGender: string, // ✅ নতুন param
 ) => {
-    const {
-        search,
-        university,
-        division,
-        district,
-        thana,
-        gender,
-        minAge,
-        maxAge,
-        educationVariety,
-        faith,
-        practiceLevel,
-        personality,
-        habits,
-        page = 1,
-        limit = 10,
-        sort = "-createdAt",
-    } = query;
+  const {
+    search, university, division, district, thana, gender,
+    minAge, maxAge, educationVariety, faith, practiceLevel,
+    personality, habits, page = 1, limit = 10, sort = "-createdAt",
+  } = query;
 
-    const builder = new AggregationBuilder(Profile);
+  // ✅ Opposite gender calculate
+  const oppositeGender = currentUserGender === "male" ? "female" : "male";
 
-    const lookups = [
-        { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "user" } },
-        { $lookup: { from: "universities", localField: "education.graduation.universityId", foreignField: "_id", as: "university" } },
-        { $lookup: { from: "divisions", localField: "address.divisionId", foreignField: "_id", as: "division" } },
-        { $lookup: { from: "districts", localField: "address.districtId", foreignField: "_id", as: "district" } },
-        { $lookup: { from: "thanas", localField: "address.thanaId", foreignField: "_id", as: "thana" } },
-    ];
+  const builder = new AggregationBuilder(Profile);
 
-    builder.addLookups(lookups);
+const lookups = [
+  {
+    $lookup: {
+      from: "users",
+      localField: "userId",
+      foreignField: "_id",
+      as: "user",
+    },
+  },
+  {
+    $unwind: "$user", // ✅ THIS IS THE FIX
+  },
 
-    builder.addMatch("userId", { $ne: new Types.ObjectId(currentUserId) });
+  { $lookup: { from: "universities", localField: "education.graduation.universityId", foreignField: "_id", as: "university" } },
+  { $lookup: { from: "divisions", localField: "address.divisionId", foreignField: "_id", as: "division" } },
+  { $lookup: { from: "districts", localField: "address.districtId", foreignField: "_id", as: "district" } },
+  { $lookup: { from: "thanas", localField: "address.thanaId", foreignField: "_id", as: "thana" } },
+];
 
-    builder
-        .addRegexMatch("university.name", university as string)
-        .addRegexMatch("division.name", division as string)
-        .addRegexMatch("district.name", district as string)
-        .addRegexMatch("thana.name", thana as string)
-        .addMatch("user.gender", gender as string);
+  builder.addLookups(lookups);
 
-    if (educationVariety) builder.addMatch("education.graduation.variety", educationVariety);
-    if (faith) builder.addMatch("religion.faith", faith);
-    if (practiceLevel) builder.addMatch("religion.practiceLevel", practiceLevel);
-    if (personality) builder.addMatch("personality", personality);
-    if (habits?.length) builder.addMatch("habits", { $in: habits });
+  builder.addMatch("userId", { $ne: new Types.ObjectId(currentUserId) });
+  builder.addMatch("user.gender", oppositeGender);
 
-    if (minAge || maxAge) {
-        const now = new Date();
-        const ageFilter: any = {};
-        if (minAge) ageFilter.$lte = new Date(now.getFullYear() - minAge, now.getMonth(), now.getDate());
-        if (maxAge) ageFilter.$gte = new Date(now.getFullYear() - maxAge, now.getMonth(), now.getDate());
-        builder.addMatch("birthDate", ageFilter);
-    }
+  builder
+    .addRegexMatch("university.name", university as string)
+    .addRegexMatch("division.name", division as string)
+    .addRegexMatch("district.name", district as string)
+    .addRegexMatch("thana.name", thana as string);
 
-    if (search) {
-        builder.addSearch(search, [
-            "user.name",
-            "education.graduation.institution",
-            "division.name",
-            "district.name",
-            "thana.name",
-        ]);
-    }
+  if (educationVariety) builder.addMatch("education.graduation.variety", educationVariety);
+  if (faith) builder.addMatch("religion.faith", faith);
+  if (practiceLevel) builder.addMatch("religion.practiceLevel", practiceLevel);
+  if (personality) builder.addMatch("personality", personality);
+  if (habits?.length) builder.addMatch("habits", { $in: habits });
 
-    const result = await builder
-        .addSort(sort)
-        .addPagination(Number(page), Number(limit))
-        .build()
-        .execute();
+  if (minAge || maxAge) {
+    const now = new Date();
+    const ageFilter: any = {};
+    if (minAge) ageFilter.$lte = new Date(now.getFullYear() - minAge, now.getMonth(), now.getDate());
+    if (maxAge) ageFilter.$gte = new Date(now.getFullYear() - maxAge, now.getMonth(), now.getDate());
+    builder.addMatch("birthDate", ageFilter);
+  }
 
-    return result;
+  if (search) {
+    builder.addSearch(search, [
+      "user.name",
+      "education.graduation.institution",
+      "division.name",
+      "district.name",
+      "thana.name",
+    ]);
+  }
+
+  return await builder
+    .addSort(sort)
+    .addPagination(Number(page), Number(limit))
+    .build()
+    .execute();
 };
 
 // ─── Get My Profile ───────────────────────────────────────────────────────────

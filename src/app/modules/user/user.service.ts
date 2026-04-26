@@ -34,6 +34,7 @@ const issueTokens = async (user: {
     isVerified: boolean;
     isProfileCompleted: boolean;
     subscription: string;
+    gender?: string;
 }) => {
     const payload = buildTokenPayload(user);
     const accessToken = signAccessToken(payload);
@@ -76,7 +77,7 @@ const registerUser = async (payload: TRegisterInput) => {
     return {
         message: "OTP sent successfully. Please verify your phone number.",
         phone,
-        otp, // 🔴 DEVELOPMENT ONLY — remove in production
+        otp, 
     };
 };
 
@@ -110,6 +111,7 @@ const verifyOtp = async (payload: TVerifyOtpInput) => {
         isVerified: user.isVerified,
         isProfileCompleted: user.isProfileCompleted ?? false,
         subscription: user.subscription,
+        gender: user.gender,
     });
 
     return {
@@ -184,6 +186,7 @@ const loginUser = async (payload: TLoginInput) => {
             isVerified: user.isVerified,
             isProfileCompleted: user.isProfileCompleted ?? false,
             subscription: user.subscription,
+            gender: user.gender,
         });
 
         return { message: "Login successful", accessToken, refreshToken, user };
@@ -216,20 +219,14 @@ const loginUser = async (payload: TLoginInput) => {
         isVerified: false,
         isProfileCompleted: false,
         subscription: "free",
+        gender: otpDoc.userData.gender,
     });
 
     return {
         message: "Login successful (pending verification)",
         accessToken,
         refreshToken: null,
-        user: {
-            name: otpDoc.userData.name,
-            email: otpDoc.userData.email,
-            phone: otpDoc.userData.phone,
-            gender: otpDoc.userData.gender,
-            isVerified: false,
-            subscription: "free",
-        },
+      
     };
 };
 
@@ -335,18 +332,14 @@ const resetPassword = async (payload: TResetPasswordInput) => {
         isVerified: user.isVerified,
         isProfileCompleted: user.isProfileCompleted ?? false,
         subscription: user.subscription,
+        gender: user.gender,
     });
 
     return {
         message: "Password changed successfully.",
         accessToken,
         refreshToken,
-        user: {
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-        },
+
     };
 };
 
@@ -425,7 +418,6 @@ const updateBlockStatus = async (
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
 
-    // ✅ Block হলে তাৎক্ষণিক পরের request-এই reject হবে
     await Promise.all([
         invalidateUserCache(userId),
         ...(isBlocked ? [revokeRefreshToken(userId)] : []),
@@ -435,8 +427,7 @@ const updateBlockStatus = async (
 };
 
 // ─── Update Subscription ──────────────────────────────────────────────────────
-// ✅ এই service টা payment/subscription module থেকে call করতে হবে
-// যখনই subscription পরিবর্তন হবে — premium কেনা, cancel, expire
+
 const updateSubscription = async (userId: string, subscription: string) => {
     const user = await User.findByIdAndUpdate(
         userId,
@@ -448,8 +439,7 @@ const updateSubscription = async (userId: string, subscription: string) => {
         throw new AppError(StatusCodes.NOT_FOUND, "User not found");
     }
 
-    // ✅ Cache invalidate — পরের request থেকেই নতুন subscription দেখাবে
-    // কোনো re-login লাগবে না
+
     await invalidateUserCache(userId);
 
     return user;

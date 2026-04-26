@@ -18,24 +18,26 @@ export type TTokenPayload = {
     isVerified: boolean;
     isProfileCompleted: boolean;
     subscription: string;
+    gender?: string;
 };
 
 // ─── Build Minimal Payload ────────────────────────────────────────────────────
 // ❌ phone & email intentionally excluded — PII should never go in JWT
 export const buildTokenPayload = (user: {
-    _id: unknown;
-    role: string;
-    isVerified: boolean;
-    isProfileCompleted: boolean;
-    subscription: string;
-}): TTokenPayload => ({
-    id: user._id as string,
-    role: user.role,
-    isVerified: user.isVerified,
-    isProfileCompleted: user.isProfileCompleted,
-    subscription: user.subscription,
+  _id: unknown;
+  role: string;
+  isVerified: boolean;
+  isProfileCompleted: boolean;
+  subscription: string;
+  gender?: string; 
+}) => ({
+  id: String(user._id),
+  role: user.role,
+  isVerified: user.isVerified,
+  isProfileCompleted: user.isProfileCompleted,
+  subscription: user.subscription,
+  gender: user.gender ?? "", 
 });
-
 // ─── Sign Access Token (15 min) ───────────────────────────────────────────────
 export const signAccessToken = (payload: TTokenPayload): string =>
     jwt.sign(payload, envVars.JWT_SECRET as string, {
