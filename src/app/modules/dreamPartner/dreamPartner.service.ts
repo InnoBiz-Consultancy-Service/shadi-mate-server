@@ -26,14 +26,31 @@ const savePreference = async (userId: string, payload: any) => {
 
 
 // dreamPartner.service.ts
-const findMatches = async (userId: string, userGender: string, page = 1, limit = 10) => {
+const findMatches = async (
+  userId: string,
+  userGender: string,
+  page = 1,
+  limit = 10
+) => {
   const preference = await DreamPartnerPreference.findOne({ userId });
-  if (!preference) throw new AppError(StatusCodes.NOT_FOUND, "Dream Partner preference not found");
+
+  // ✅ FIX: no error
+  if (!preference) {
+    return {
+      data: [],
+      meta: {
+        page,
+        limit,
+        total: 0,
+      },
+      message: "Please set your dream partner preference first",
+    };
+  }
 
   const { practiceLevel, economicalStatus, habits } = preference;
 
-  // ✅ Opposite gender
-  const oppositeGender = userGender === "male" ? "female" : "male";
+  const oppositeGender =
+    userGender === "male" ? "female" : "male";
 
   const matches = await Profile.aggregate([
     {
@@ -44,33 +61,46 @@ const findMatches = async (userId: string, userGender: string, page = 1, limit =
         as: "user",
       },
     },
+    { $unwind: "$user" },
+
     {
       $match: {
-        "userId": { $ne: new mongoose.Types.ObjectId(userId) },
-        "user.gender": oppositeGender, // ✅
+        userId: { $ne: new mongoose.Types.ObjectId(userId) },
+        "user.gender": oppositeGender,
       },
     },
+
     {
       $addFields: {
         matchScore: {
           $add: [
             { $cond: [{ $eq: ["$religion.practiceLevel", practiceLevel] }, 1, 0] },
             { $cond: [{ $eq: ["$economicalStatus", economicalStatus] }, 1, 0] },
-            { $cond: [{ $gt: [{ $size: { $setIntersection: ["$habits", habits] } }, 0] }, 1, 0] },
+            {
+              $cond: [
+                { $gt: [{ $size: { $setIntersection: ["$habits", habits] } }, 0] },
+                1,
+                0,
+              ],
+            },
           ],
         },
       },
     },
+
     { $sort: { matchScore: -1 } },
     { $skip: (page - 1) * limit },
     { $limit: limit },
-    { $lookup: { from: "universities", localField: "education.graduation.universityId", foreignField: "_id", as: "university" } },
-    { $lookup: { from: "divisions", localField: "address.divisionId", foreignField: "_id", as: "division" } },
-    { $lookup: { from: "districts", localField: "address.districtId", foreignField: "_id", as: "district" } },
-    { $lookup: { from: "thanas", localField: "address.thanaId", foreignField: "_id", as: "thana" } },
   ]);
 
-  return matches;
+  return {
+    data: matches,
+    meta: {
+      page,
+      limit,
+      total: matches.length,
+    },
+  };
 };
 const notifyMatchingUsers = async (profile: any) => {
     const newProfileUser = await User.findById(profile.userId).select("gender").lean();
@@ -79,24 +109,27 @@ const notifyMatchingUsers = async (profile: any) => {
     const newProfileGender = newProfileUser.gender;
     const receiverGender = newProfileGender === "male" ? "female" : "male";
 
-    const preferences = await DreamPartnerPreference.aggregate([
-        {
-            $lookup: {
-                from: "users",
-                localField: "userId",
-                foreignField: "_id",
-                as: "user",
-            },
-        },
-        {
-           
-            $match: {
-                "user.gender": receiverGender,
-                "userId": { $ne: new mongoose.Types.ObjectId(profile.userId.toString()) },
-            },
-        },
-    ]);
-
+  const preferences = await DreamPartnerPreference.aggregate([
+  {
+    $lookup: {
+      from: "users",
+      localField: "userId",
+      foreignField: "_id",
+      as: "user",
+    },
+  },
+  {
+    $unwind: "$user", 
+  },
+  {
+    $match: {
+      "user.gender": receiverGender,
+      userId: {
+        $ne: new mongoose.Types.ObjectId(profile.userId.toString()),
+      },
+    },
+  },
+]);
     for (const pref of preferences) {
         let score = 0;
         const total = 3;
