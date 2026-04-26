@@ -27,10 +27,6 @@ exports.getChatHistory = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(vo
     if (!isValidObjectId(req.params.userId)) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Invalid user ID");
     }
-    // ❌ REMOVED: Premium check - এখন সবাই চ্যাট হিস্ট্রি দেখতে পারবে
-    // if (user.subscription !== "premium") {
-    //     throw new AppError(StatusCodes.FORBIDDEN, "Upgrade to premium to view chat history");
-    // }
     const myId = new mongoose_1.Types.ObjectId(user.id);
     const otherId = new mongoose_1.Types.ObjectId(req.params.userId);
     if (myId.equals(otherId)) {
@@ -75,8 +71,6 @@ exports.getChatHistory = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(vo
 exports.getConversationList = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const user = req.user;
     const myId = new mongoose_1.Types.ObjectId(user.id);
-    // // সবাই কনভারসেশন দেখতে পারবে, শুধু প্রিমিয়াম ফিচার আলাদা
-    // const isPremium = user.subscription === "premium";
     const conversations = yield chat_model_1.Conversation.find({ participantIds: myId })
         .sort({ lastMessageAt: -1 })
         .populate("participantIds", "name avatar")
@@ -92,10 +86,6 @@ exports.getConversationList = (0, catchAsync_1.catchAsync)((req, res) => __await
             lastMessageTime: conv.lastMessageAt,
             unreadCount,
         };
-        // // নন-প্রিমিয়াম ইউজারদের জন্য লাস্ট মেসেজ দেখাবে না
-        // if (!isPremium) {
-        //     return { ...base, lastMessage: null, lastMessageType: null, isLocked: true };
-        // }
         return Object.assign(Object.assign({}, base), { lastMessage: conv.lastMessage, lastMessageType: conv.lastMessageType, status: conv.lastMessageStatus, isLocked: false });
     });
     (0, sendResponse_1.sendResponse)(res, {

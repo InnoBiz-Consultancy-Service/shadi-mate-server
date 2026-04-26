@@ -36,7 +36,8 @@ const updateProfile = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 
 }));
 // ─── Get Profiles (Search + Filter) ─────────────────
 const getProfiles = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const result = yield profile_service_1.ProfileService.getProfiles(req.query);
+    const userId = req.user.id;
+    const result = yield profile_service_1.ProfileService.getProfiles(req.query, userId);
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.OK,
         success: true,

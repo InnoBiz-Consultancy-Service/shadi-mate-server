@@ -8,10 +8,8 @@ const subscription_controller_1 = require("./subscription.controller");
 const auth_middleware_1 = __importDefault(require("../../../middleWares/auth.middleware"));
 const SubscriptionRoutes = (0, express_1.Router)();
 // ─── Public ───────────────────────────────────────────────────────────────────
-// GET /api/v1/subscriptions/plans
 SubscriptionRoutes.get("/plans", subscription_controller_1.SubscriptionController.getPlans);
-// EPS Callback URLs (Public — EPS server থেকে আসবে)
-// Remove the :id parameter - these should be exact paths
+SubscriptionRoutes.get("/currency", subscription_controller_1.SubscriptionController.getUserCurrency);
 SubscriptionRoutes.post("/payment/success", subscription_controller_1.SubscriptionController.paymentSuccess);
 SubscriptionRoutes.get("/payment/success", subscription_controller_1.SubscriptionController.paymentSuccess);
 SubscriptionRoutes.post("/payment/fail", subscription_controller_1.SubscriptionController.paymentFail);

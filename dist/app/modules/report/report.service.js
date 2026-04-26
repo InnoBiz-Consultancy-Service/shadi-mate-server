@@ -82,7 +82,7 @@ const notifyAdmins = (reporterId, reportedUserId, reportId, reason) => __awaiter
                     reason,
                 },
             });
-            const adminSocketId = yield redis_1.default.hget("onlineUsers", adminId);
+            const adminSocketId = yield redis_1.default.hGet("onlineUsers", adminId);
             if (adminSocketId) {
                 io.to(String(adminSocketId)).emit("new-report", {
                     _id: notification._id,

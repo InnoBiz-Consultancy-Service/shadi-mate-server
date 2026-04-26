@@ -21,7 +21,7 @@ const profileQueryBuilder_1 = require("../../../utils/profileQueryBuilder");
 const like_servce_1 = require("../like/like.servce");
 const profileCompletaion_1 = require("./profileCompletaion");
 const mongoose_1 = require("mongoose");
-// ─── Profile Completion Check (boolean — isProfileCompleted flag এর জন্য) ─────
+const dreamPartner_service_1 = require("../dreamPartner/dreamPartner.service");
 const checkProfileCompletion = (profile) => {
     var _a, _b, _c, _d, _e;
     return !!(profile.gender &&
@@ -44,21 +44,32 @@ const createProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
     yield user_model_1.User.findByIdAndUpdate(userId, { isProfileCompleted: completed });
     // ─── Cache invalidate ─────────────────────────────────────────────────────
     yield (0, like_servce_1.invalidateProfileCache)(userId);
+    try {
+        yield dreamPartner_service_1.DreamPartnerService.notifyMatchingUsers(profile);
+    }
+    catch (err) {
+        console.log("❌ match email error:", err);
+    }
     return profile;
 });
 // ─── Update Profile ───────────────────────────────────────────────────────────
 const updateProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
-    const profile = yield profile_model_1.Profile.findOneAndUpdate({ userId }, payload, { new: true, runValidators: true });
+    const updateData = Object.assign({}, payload);
+    // ❗ undefined field remove করো
+    Object.keys(updateData).forEach((key) => {
+        if (updateData[key] === undefined) {
+            delete updateData[key];
+        }
+    });
+    const profile = yield profile_model_1.Profile.findOneAndUpdate({ userId }, updateData, { new: true, runValidators: true });
     if (!profile) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Profile not found");
     }
-    const completed = checkProfileCompletion(profile);
-    yield user_model_1.User.findByIdAndUpdate(userId, { isProfileCompleted: completed });
-    yield (0, like_servce_1.invalidateProfileCache)(userId);
     return profile;
 });
 // ─── Get Profiles (Search + Filter) ──────────────────────────────────────────
-const getProfiles = (query) => __awaiter(void 0, void 0, void 0, function* () {
+const getProfiles = (query, currentUserId // ✅ নতুন parameter
+) => __awaiter(void 0, void 0, void 0, function* () {
     const { search, university, division, district, thana, gender, minAge, maxAge, educationVariety, faith, practiceLevel, personality, habits, page = 1, limit = 10, sort = "-createdAt", } = query;
     const builder = new profileQueryBuilder_1.AggregationBuilder(profile_model_1.Profile);
     const lookups = [
@@ -69,6 +80,7 @@ const getProfiles = (query) => __awaiter(void 0, void 0, void 0, function* () {
         { $lookup: { from: "thanas", localField: "address.thanaId", foreignField: "_id", as: "thana" } },
     ];
     builder.addLookups(lookups);
+    builder.addMatch("userId", { $ne: new mongoose_1.Types.ObjectId(currentUserId) });
     builder
         .addRegexMatch("university.name", university)
         .addRegexMatch("division.name", division)
@@ -133,13 +145,11 @@ const getMyProfile = (userId) => __awaiter(void 0, void 0, void 0, function* () 
         })) });
 });
 const getProfileByUserIdFromDB = (userId) => __awaiter(void 0, void 0, void 0, function* () {
-    // 🔒 Validate ObjectId
     if (!mongoose_1.Types.ObjectId.isValid(userId)) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Invalid user ID");
     }
-    // 🔥 মূল fix — userId দিয়ে profile খোঁজা
     const profile = yield profile_model_1.Profile.findOne({ userId })
-        .populate("userId", "name email") // optional
+        .populate("userId", "name email")
         .lean();
     if (!profile) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Profile not found");

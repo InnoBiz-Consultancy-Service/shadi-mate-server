@@ -18,6 +18,8 @@ const http_status_codes_1 = require("http-status-codes");
 const dreamPartner_model_1 = require("./dreamPartner.model");
 const profile_model_1 = require("../profile/profile.model");
 const AppError_1 = __importDefault(require("../../../helpers/AppError"));
+const mailer_1 = require("../../../utils/mailer");
+const user_model_1 = require("../user/user.model");
 const savePreference = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     if (!userId)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "User ID is required");
@@ -27,6 +29,7 @@ const savePreference = (userId, payload) => __awaiter(void 0, void 0, void 0, fu
     }
     return yield dreamPartner_model_1.DreamPartnerPreference.create(Object.assign({ userId }, payload));
 });
+const mongoose_1 = __importDefault(require("mongoose"));
 const findMatches = (userId_1, ...args_1) => __awaiter(void 0, [userId_1, ...args_1], void 0, function* (userId, page = 1, limit = 10) {
     const preference = yield dreamPartner_model_1.DreamPartnerPreference.findOne({ userId });
     if (!preference)
@@ -35,7 +38,7 @@ const findMatches = (userId_1, ...args_1) => __awaiter(void 0, [userId_1, ...arg
     const matches = yield profile_model_1.Profile.aggregate([
         {
             $match: {
-                _id: { $ne: userId } // নিজের profile বাদ দিবে
+                userId: { $ne: new mongoose_1.default.Types.ObjectId(userId) }
             }
         },
         {
@@ -49,7 +52,7 @@ const findMatches = (userId_1, ...args_1) => __awaiter(void 0, [userId_1, ...arg
                 }
             }
         },
-        { $sort: { matchScore: -1, "userId.name": 1 } }, // score অনুযায়ী descending
+        { $sort: { matchScore: -1 } },
         { $skip: (page - 1) * limit },
         { $limit: limit },
         {
@@ -95,7 +98,37 @@ const findMatches = (userId_1, ...args_1) => __awaiter(void 0, [userId_1, ...arg
     ]);
     return matches;
 });
+const notifyMatchingUsers = (profile) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c;
+    const preferences = yield dreamPartner_model_1.DreamPartnerPreference.find();
+    for (const pref of preferences) {
+        let score = 0;
+        const total = 3;
+        if (pref.practiceLevel === ((_a = profile.religion) === null || _a === void 0 ? void 0 : _a.practiceLevel))
+            score++;
+        if (pref.economicalStatus === profile.economicalStatus)
+            score++;
+        if (((_b = pref.habits) === null || _b === void 0 ? void 0 : _b.length) &&
+            ((_c = profile.habits) === null || _c === void 0 ? void 0 : _c.some((h) => pref.habits.includes(h)))) {
+            score++;
+        }
+        const matchPercentage = (score / total) * 100;
+        if (matchPercentage >= 40) {
+            // 🔥 IMPORTANT: THIS USER IS RECEIVER (preference owner)
+            const user = yield user_model_1.User.findById(pref.userId).select("email name");
+            if (user === null || user === void 0 ? void 0 : user.email) {
+                yield (0, mailer_1.sendMatchEmail)({
+                    to: user.email,
+                    name: user.name,
+                    profileId: profile.userId.toString(),
+                    matchPercentage,
+                });
+            }
+        }
+    }
+});
 exports.DreamPartnerService = {
     savePreference,
     findMatches,
+    notifyMatchingUsers,
 };

@@ -22,6 +22,7 @@ const redis_1 = require("./utils/redis");
 const seedSuperAdmin_1 = require("./seeders/seedSuperAdmin");
 const seedGeoData_1 = require("./seeders/seedGeoData");
 const seedPersonalityQuestions_1 = require("./seeders/seedPersonalityQuestions");
+const subscriptioncron_1 = require("./utils/subscriptioncron");
 const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield mongoose_1.default.connect(envConfig_1.envVars.DB_URL);
@@ -38,6 +39,7 @@ const startServer = () => __awaiter(void 0, void 0, void 0, function* () {
         (0, seedSuperAdmin_1.seedSuperAdmin)();
         (0, seedGeoData_1.seedGeoData)();
         (0, seedPersonalityQuestions_1.seedPersonalityQuestions)();
+        (0, subscriptioncron_1.startSubscriptionCron)();
     }
     catch (err) {
         console.error("❌ Server error:", err);

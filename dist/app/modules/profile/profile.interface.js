@@ -27,6 +27,8 @@ var EconomicalStatus;
     EconomicalStatus["LOW"] = "Low";
     EconomicalStatus["MEDIUM"] = "Medium";
     EconomicalStatus["HIGH"] = "High";
+    EconomicalStatus["MIDDLE_CLASS"] = "Middle Class";
+    EconomicalStatus["UPPER_MIDDLE_CLASS"] = "Upper Middle Class";
 })(EconomicalStatus || (exports.EconomicalStatus = EconomicalStatus = {}));
 var Habits;
 (function (Habits) {
@@ -46,4 +48,5 @@ var Habits;
     Habits["ENTREPRENEURSHIP"] = "Entrepreneurship";
     Habits["TECHNOLOGY"] = "Technology";
     Habits["OTHERS"] = "others";
+    Habits["MUSIC"] = "Music";
 })(Habits || (exports.Habits = Habits = {}));

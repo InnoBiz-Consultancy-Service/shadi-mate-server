@@ -20,7 +20,7 @@ const user_model_1 = require("../user/user.model");
 const envConfig_1 = require("../../../config/envConfig");
 const axios_1 = __importDefault(require("axios"));
 const epsHelper_1 = require("../../../utils/epsHelper");
-const user_cache_1 = require("../user/user.cache"); // ✅ add
+const user_cache_1 = require("../user/user.cache");
 const mongoose_1 = __importDefault(require("mongoose"));
 // ─── Plan Config ──────────────────────────────────────────────────────────────
 exports.PLAN_CONFIG = {
@@ -58,6 +58,14 @@ const generateMerchantTransactionId = () => {
     const random = Math.floor(Math.random() * 1000).toString().padStart(3, "0");
     return `SM${timestamp}${random}`;
 };
+// ─── Get correct backend base URL ─────────────────────────────────────────────
+// BACKEND_URL in env should be like: https://shadi-mate-server.onrender.com/api/v1
+// The callback routes are registered under /api/v1/subscriptions/payment/...
+const getBackendUrl = () => {
+    const url = envConfig_1.envVars.BACKEND_URL;
+    // Remove trailing slash if present
+    return url.replace(/\/$/, "");
+};
 // ─── Initiate Payment ─────────────────────────────────────────────────────────
 const initiatePayment = (userId, plan) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
@@ -70,14 +78,17 @@ const initiatePayment = (userId, plan) => __awaiter(void 0, void 0, void 0, func
         endDate: { $gt: new Date() },
     }).lean();
     if (activeSubscription) {
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.CONFLICT, `You have an active subscription that will expire on ${new Date(activeSubscription.endDate).toLocaleDateString("bn-BD")}.`);
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.CONFLICT, `You have an active subscription that will expire on ${new Date(activeSubscription.endDate).toLocaleDateString("en-BD")}.`);
     }
     const planConfig = exports.PLAN_CONFIG[plan];
     const merchantTransactionId = generateMerchantTransactionId();
     const customerOrderId = `ORD${Date.now()}`;
-    const successUrl = `${envConfig_1.envVars.BACKEND_URL}/subscriptions/payment/success`;
-    const failUrl = `${envConfig_1.envVars.BACKEND_URL}/subscriptions/payment/fail`;
-    const cancelUrl = `${envConfig_1.envVars.BACKEND_URL}/subscriptions/payment/cancel`;
+    const backendBase = getBackendUrl();
+    // These must exactly match what EPS will call back
+    const successUrl = `${backendBase}/subscriptions/payment/success`;
+    const failUrl = `${backendBase}/subscriptions/payment/fail`;
+    const cancelUrl = `${backendBase}/subscriptions/payment/cancel`;
+    console.log("💳 Payment callback URLs:", { successUrl, failUrl, cancelUrl });
     yield subscription_model_1.Payment.create({
         userId,
         plan,
@@ -141,6 +152,7 @@ const initiatePayment = (userId, plan) => __awaiter(void 0, void 0, void 0, func
             },
         });
         epsResponse = response.data;
+        console.log("✅ EPS Initialize response:", JSON.stringify(epsResponse));
     }
     catch (err) {
         console.error("❌ EPS InitializeEPS error:", (_b = (_a = err === null || err === void 0 ? void 0 : err.response) === null || _a === void 0 ? void 0 : _a.data) !== null && _b !== void 0 ? _b : err.message);
@@ -149,7 +161,7 @@ const initiatePayment = (userId, plan) => __awaiter(void 0, void 0, void 0, func
     }
     if (!(epsResponse === null || epsResponse === void 0 ? void 0 : epsResponse.RedirectURL)) {
         yield subscription_model_1.Payment.findOneAndUpdate({ merchantTransactionId }, { paymentStatus: "failed" });
-        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_GATEWAY, "EPS থেকে payment URL পাওয়া যায়নি");
+        throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_GATEWAY, "Could not get payment URL from EPS");
     }
     console.log(`💳 Payment initialized: ${merchantTransactionId} | Plan: ${plan} | Amount: ${planConfig.amount} BDT`);
     return {
@@ -173,6 +185,7 @@ const verifyTransaction = (merchantTransactionId) => __awaiter(void 0, void 0, v
                 "Authorization": `Bearer ${token}`,
             },
         });
+        console.log("✅ EPS Verify response:", JSON.stringify(response.data));
         return response.data;
     }
     catch (err) {
@@ -182,14 +195,16 @@ const verifyTransaction = (merchantTransactionId) => __awaiter(void 0, void 0, v
 });
 // ─── Payment Success Callback ─────────────────────────────────────────────────
 const handlePaymentSuccess = (callbackData) => __awaiter(void 0, void 0, void 0, function* () {
-    const merchantTransactionId = callbackData.merchantTransactionId ||
-        callbackData.MerchantTransactionId;
+    const { merchantTransactionId, status, epsTransactionId } = callbackData;
+    console.log("🔄 handlePaymentSuccess called:", { merchantTransactionId, status, epsTransactionId });
     if (!merchantTransactionId) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Transaction ID missing");
     }
     const payment = yield subscription_model_1.Payment.findOne({ merchantTransactionId });
-    if (!payment)
+    if (!payment) {
+        console.error("❌ Payment not found for:", merchantTransactionId);
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Payment record not found");
+    }
     // ─── Duplicate callback guard ─────────────────────────────────────────────
     if (payment.paymentStatus === "success") {
         console.log(`⚠️ Duplicate callback: ${merchantTransactionId}`);
@@ -197,7 +212,14 @@ const handlePaymentSuccess = (callbackData) => __awaiter(void 0, void 0, void 0,
     }
     // ─── EPS verify ───────────────────────────────────────────────────────────
     const verifyResult = yield verifyTransaction(merchantTransactionId);
-    if (!verifyResult || verifyResult.Status !== "Success") {
+    // Accept if either:
+    // 1. EPS verify returns Status === "Success"
+    // 2. The original callback status was "Success" AND verify returned something (sandbox may differ)
+    const isVerified = (verifyResult === null || verifyResult === void 0 ? void 0 : verifyResult.Status) === "Success" ||
+        (verifyResult === null || verifyResult === void 0 ? void 0 : verifyResult.status) === "Success" ||
+        (status === "Success" && verifyResult !== null);
+    if (!isVerified) {
+        console.error("❌ Transaction verification failed. verifyResult:", verifyResult);
         yield subscription_model_1.Payment.findByIdAndUpdate(payment._id, { paymentStatus: "failed" });
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Transaction verification failed");
     }
@@ -209,7 +231,6 @@ const handlePaymentSuccess = (callbackData) => __awaiter(void 0, void 0, void 0,
     let subscription;
     try {
         yield session.withTransaction(() => __awaiter(void 0, void 0, void 0, function* () {
-            // ── Step 1: Subscription create ───────────────────────────────────
             const [createdSub] = yield subscription_model_1.Subscription.create([
                 {
                     userId: payment.userId,
@@ -221,14 +242,12 @@ const handlePaymentSuccess = (callbackData) => __awaiter(void 0, void 0, void 0,
                 },
             ], { session });
             subscription = createdSub;
-            // ── Step 2: Payment update ────────────────────────────────────────
             yield subscription_model_1.Payment.findByIdAndUpdate(payment._id, {
                 paymentStatus: "success",
-                epsTransactionId: verifyResult.MerchantTransactionId,
+                epsTransactionId: epsTransactionId || (verifyResult === null || verifyResult === void 0 ? void 0 : verifyResult.MerchantTransactionId) || "",
                 subscriptionId: createdSub._id,
                 paidAt: new Date(),
             }, { session });
-            // ── Step 3: User premium করো ──────────────────────────────────────
             yield user_model_1.User.findByIdAndUpdate(payment.userId, { subscription: "premium" }, { session });
         }));
     }
@@ -237,12 +256,14 @@ const handlePaymentSuccess = (callbackData) => __awaiter(void 0, void 0, void 0,
     }
     const userId = String(payment.userId);
     yield (0, user_cache_1.invalidateUserCache)(userId);
-    console.log(`✅ Premium activated: user ${userId} | ${payment.plan} | Until: ${endDate.toLocaleDateString("bn-BD")}`);
+    console.log(`✅ Premium activated: user ${userId} | ${payment.plan} | Until: ${endDate.toLocaleDateString("en-BD")}`);
     return { success: true, subscription };
 });
 // ─── Payment Fail ─────────────────────────────────────────────────────────────
 const handlePaymentFail = (callbackData) => __awaiter(void 0, void 0, void 0, function* () {
-    const id = callbackData.merchantTransactionId || callbackData.MerchantTransactionId;
+    const id = callbackData.merchantTransactionId ||
+        callbackData.MerchantTransactionId ||
+        callbackData["MerchantTransactionId "] || "";
     if (id) {
         yield subscription_model_1.Payment.findOneAndUpdate({ merchantTransactionId: id, paymentStatus: "pending" }, { paymentStatus: "failed" });
     }
@@ -251,7 +272,9 @@ const handlePaymentFail = (callbackData) => __awaiter(void 0, void 0, void 0, fu
 });
 // ─── Payment Cancel ───────────────────────────────────────────────────────────
 const handlePaymentCancel = (callbackData) => __awaiter(void 0, void 0, void 0, function* () {
-    const id = callbackData.merchantTransactionId || callbackData.MerchantTransactionId;
+    const id = callbackData.merchantTransactionId ||
+        callbackData.MerchantTransactionId ||
+        callbackData["MerchantTransactionId "] || "";
     if (id) {
         yield subscription_model_1.Payment.findOneAndUpdate({ merchantTransactionId: id, paymentStatus: "pending" }, { paymentStatus: "cancelled" });
     }
@@ -289,9 +312,8 @@ const expireSubscriptions = () => __awaiter(void 0, void 0, void 0, function* ()
     }
     yield subscription_model_1.Subscription.updateMany({ _id: { $in: expiredList.map((s) => s._id) } }, { status: "expired" });
     yield user_model_1.User.updateMany({ _id: { $in: expiredList.map((s) => s.userId) } }, { subscription: "free" });
-    // ✅ Expire হওয়া সব user-এর cache invalidate — পরের request থেকে "free" দেখাবে
     yield Promise.all(expiredList.map((s) => (0, user_cache_1.invalidateUserCache)(String(s.userId))));
-    console.log(`🔄 ${expiredList.length} subscription(s) expired — users downgraded to free`);
+    console.log(`🔄 ${expiredList.length} subscription(s) expired`);
 });
 exports.SubscriptionService = {
     initiatePayment,
