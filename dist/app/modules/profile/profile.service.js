@@ -68,12 +68,24 @@ const updateProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
     return profile;
 });
 // ─── Get Profiles (Search + Filter) ──────────────────────────────────────────
-const getProfiles = (query, currentUserId // ✅ নতুন parameter
-) => __awaiter(void 0, void 0, void 0, function* () {
+// profile.service.ts
+const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 0, void 0, void 0, function* () {
     const { search, university, division, district, thana, gender, minAge, maxAge, educationVariety, faith, practiceLevel, personality, habits, page = 1, limit = 10, sort = "-createdAt", } = query;
+    // ✅ Opposite gender calculate
+    const oppositeGender = currentUserGender === "male" ? "female" : "male";
     const builder = new profileQueryBuilder_1.AggregationBuilder(profile_model_1.Profile);
     const lookups = [
-        { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "user" } },
+        {
+            $lookup: {
+                from: "users",
+                localField: "userId",
+                foreignField: "_id",
+                as: "user",
+            },
+        },
+        {
+            $unwind: "$user", // ✅ THIS IS THE FIX
+        },
         { $lookup: { from: "universities", localField: "education.graduation.universityId", foreignField: "_id", as: "university" } },
         { $lookup: { from: "divisions", localField: "address.divisionId", foreignField: "_id", as: "division" } },
         { $lookup: { from: "districts", localField: "address.districtId", foreignField: "_id", as: "district" } },
@@ -81,12 +93,12 @@ const getProfiles = (query, currentUserId // ✅ নতুন parameter
     ];
     builder.addLookups(lookups);
     builder.addMatch("userId", { $ne: new mongoose_1.Types.ObjectId(currentUserId) });
+    builder.addMatch("user.gender", oppositeGender);
     builder
         .addRegexMatch("university.name", university)
         .addRegexMatch("division.name", division)
         .addRegexMatch("district.name", district)
-        .addRegexMatch("thana.name", thana)
-        .addMatch("user.gender", gender);
+        .addRegexMatch("thana.name", thana);
     if (educationVariety)
         builder.addMatch("education.graduation.variety", educationVariety);
     if (faith)
@@ -115,12 +127,11 @@ const getProfiles = (query, currentUserId // ✅ নতুন parameter
             "thana.name",
         ]);
     }
-    const result = yield builder
+    return yield builder
         .addSort(sort)
         .addPagination(Number(page), Number(limit))
         .build()
         .execute();
-    return result;
 });
 // ─── Get My Profile ───────────────────────────────────────────────────────────
 const getMyProfile = (userId) => __awaiter(void 0, void 0, void 0, function* () {

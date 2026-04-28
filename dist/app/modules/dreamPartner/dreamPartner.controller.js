@@ -27,11 +27,11 @@ exports.getDreamPartnerMatches = (0, catchAsync_1.catchAsync)((req, res) => __aw
     const userId = req.user.id;
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 10;
-    const matches = yield dreamPartner_service_1.DreamPartnerService.findMatches(userId, page, limit);
+    const result = yield dreamPartner_service_1.DreamPartnerService.findMatches(userId, req.user.gender, page, limit);
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: 200,
         success: true,
         message: "Matching profiles fetched successfully",
-        data: matches,
+        data: result,
     });
 }));

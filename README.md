@@ -1,100 +1,96 @@
-# ShadiMate — Backend API
+# 💍 ShadiMate — Backend API
 
-ShadiMate একটি বাংলাদেশি matrimonial platform এর backend। Node.js, Express, TypeScript, MongoDB এবং Redis দিয়ে তৈরি। Real-time chat এর জন্য Socket.IO ব্যবহার করা হয়েছে।
+A production-ready matrimony platform backend built with **Node.js**, **Express**, **TypeScript**, **MongoDB**, **Redis**, and **Socket.IO**.
 
 ---
 
-## Tech Stack
+## 📦 Tech Stack
 
-| Technology | ব্যবহার |
+| Layer | Technology |
 |---|---|
-| Node.js + Express | HTTP Server |
-| TypeScript | Type Safety |
-| MongoDB + Mongoose | Database |
-| Redis (ioredis) | Caching + Real-time presence |
-| Socket.IO | Real-time chat |
-| JWT | Authentication |
-| Zod | Request validation |
-| bcryptjs | Password hashing |
+| Runtime | Node.js + TypeScript |
+| Framework | Express.js |
+| Database | MongoDB (Mongoose ODM) |
+| Cache / Session | Redis (node-redis v4) |
+| Real-time | Socket.IO |
+| Auth | JWT (Access + Refresh Tokens) + Redis blacklist |
+| Payment | EPS Payment Gateway |
+| Email | Nodemailer (SMTP) |
+| Rate Limiting | express-rate-limit + rate-limit-redis |
+| Task Scheduler | node-cron |
 
 ---
 
-## Project Structure
+## 🚀 Getting Started
 
-```
-src/
-├── app/
-│   ├── modules/
-│   │   ├── user/               # Auth, registration, login
-│   │   ├── profile/            # User profile management
-│   │   ├── chat/               # Chat history, conversation list
-│   │   ├── like/               # Like/Unlike feature
-│   │   ├── dreamPartner/       # Dream partner preferences & matching
-│   │   ├── personalityQuestion/ # Personality test (guest + user)
-│   │   └── geo/                # Division, District, Thana, University
-│   └── routes/
-│       └── index.ts            # Central route registry
-├── config/
-│   └── envConfig.ts            # Environment variable loader
-├── data/
-│   ├── geoSeedData.ts          # Bangladesh geo data
-│   ├── personalityQuestions.ts # Personality test questions
-│   └── universities.ts         # Bangladesh university list
-├── helpers/
-│   └── AppError.ts             # Custom error class
-├── middleWares/
-│   ├── auth.middleware.ts      # JWT authentication + authorization
-│   ├── globalErrorHandler.ts   # Global error handler
-│   ├── notFound.ts             # 404 handler
-│   └── validateRequest.ts      # Zod schema validator
-├── socket/
-│   ├── index.ts                # Socket.IO initializer
-│   └── handlers/
-│       ├── presence.handlers.ts  # Online/offline tracking
-│       ├── chat.handlers.ts      # Real-time messaging
-│       ├── typing.handlers.ts    # Typing indicator
-│       └── seen.handlers.ts      # Message seen status
-├── utils/
-│   ├── catchAsync.ts           # Async error wrapper
-│   ├── sendResponse.ts         # Standardized HTTP response
-│   ├── redis.ts                # Redis client
-│   ├── socket.auth.ts          # Socket JWT verifier
-│   └── profileQueryBuilder.ts  # Aggregation pipeline builder
-├── seeders/
-│   ├── seedGeoData.ts
-│   ├── seedPersonalityQuestions.ts
-│   └── seedSuperAdmin.ts
-└── app.ts                      # Express app setup
-```
+### Prerequisites
 
----
+- Node.js >= 18
+- MongoDB (local or Atlas)
+- Redis (local or Upstash)
 
-## Environment Setup
-
-`.env` ফাইল তৈরি করো এবং নিচের variables গুলো দাও:
-
-```env
-PORT=5000
-DB_URL=mongodb+srv://<username>:<password>@cluster0.mongodb.net/<dbname>?retryWrites=true&w=majority
-NODE_ENV=development
-JWT_SECRET=your_jwt_secret_key
-JWT_EXPIRES_IN=7d
-SUPER_ADMIN_EMAIL=admin@shadimate.com
-SUPER_ADMIN_PASSWORD=your_super_admin_password
-BCRYPT_SALT_ROUND=12
-FRONTEND_URL=http://localhost:3000
-REDIS_URL=redis://localhost:6379
-```
-
----
-
-## Installation & Run
+### Installation
 
 ```bash
-# Dependencies install করো
+# 1. Clone the repository
+git clone <repo-url>
+cd shadi-mate-server
+
+# 2. Install dependencies
 npm install
 
-# Development mode
+# 3. Install rate limiting packages
+npm install express-rate-limit rate-limit-redis
+```
+
+### Environment Variables
+
+Create a `.env` file in the root:
+
+```env
+# Server
+PORT=5000
+NODE_ENV=development
+
+# MongoDB
+DB_URL=mongodb://localhost:27017/shadiMate
+
+# JWT
+JWT_SECRET=your_jwt_secret_key_minimum_32_chars
+JWT_EXPIRES_IN=2d
+
+# Redis
+REDIS_URL=redis://localhost:6379
+
+# CORS / URLs
+FRONTEND_URL=http://localhost:3000
+BACKEND_URL=http://localhost:5000/api/v1
+
+# Super Admin Seed
+SUPER_ADMIN_EMAIL=admin@shadiMate.com
+SUPER_ADMIN_PASSWORD=your_strong_admin_password
+
+# EPS Payment Gateway (Sandbox)
+EPS_HASH_KEY=your_eps_hash_key
+EPS_USERNAME=your_eps_username
+EPS_PASSWORD=your_eps_password
+EPS_STORE_ID=your_store_id
+EPS_MERCHANT_ID=your_merchant_id
+
+# SMTP (Email)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your_email@gmail.com
+SMTP_PASS=your_app_password
+
+# Bcrypt
+BCRYPT_SALT_ROUND=12
+```
+
+### Run
+
+```bash
+# Development (hot reload)
 npm run dev
 
 # Production build
@@ -104,346 +100,396 @@ npm start
 
 ---
 
-## Subscription System
+## 🏗️ Project Structure
 
-JWT token-এ `subscription` field থাকে — `"free"` অথবা `"premium"`।
-
-| Feature | Free | Premium |
-|---|---|---|
-| Registration / Login | ✅ | ✅ |
-| Profile তৈরি ও দেখা | ✅ | ✅ |
-| Profile like/unlike করা | ✅ | ✅ |
-| Like count দেখা | ✅ | ✅ |
-| আমার দেওয়া like list | ✅ | ✅ |
-| কে আমাকে like দিয়েছে | ❌ | ✅ |
-| Chat message **send** করা | ❌ | ✅ |
-| Chat message **receive** করা | ✅ | ✅ |
-| Conversation list (sender + count) | ✅ | ✅ |
-| Conversation message **content** দেখা | ❌ | ✅ |
-| Chat history দেখা | ❌ | ✅ |
-| Dream Partner matching | ✅ | ✅ |
-| Personality test | ✅ | ✅ |
-
----
-
-## API Reference
-
-Base URL: `/api/v1`
-
----
-
-### Auth / User — `/api/v1/users`
-
-| Method | Endpoint | Auth | বর্ণনা |
-|---|---|---|---|
-| POST | `/` | ❌ | Register (OTP পাঠায়) |
-| POST | `/verify-otp` | ❌ | OTP verify করে account তৈরি |
-| POST | `/login` | ❌ | Login |
-| POST | `/resend-otp` | ❌ | OTP resend |
-| POST | `/forgot-password` | ❌ | Forgot password OTP পাঠায় |
-| POST | `/verify-reset-otp` | ❌ | Reset password OTP verify |
-| POST | `/reset-password` | ❌ | Password change (old password দিয়ে) |
-| GET | `/me` | ✅ | নিজের user info |
-| PATCH | `/` | ✅ | Profile update |
-| PATCH | `/delete-profile/:id` | ✅ | Soft delete |
-| PATCH | `/block-user/:id` | ✅ Admin | Block/Unblock user |
-
-#### Register Request Body
-```json
-{
-  "name": "Rakib Hasan",
-  "email": "rakib@example.com",
-  "phone": "01712345678",
-  "password": "pass1234",
-  "gender": "male"
-}
+```
+src/
+├── app.ts                          # Express app setup (trust proxy, global limiter)
+├── server.ts                       # Server start, DB connect, seeders, cron
+├── app/
+│   ├── modules/
+│   │   ├── user/                   # Auth (register, login, OTP, JWT)
+│   │   ├── profile/                # Profile CRUD + search/filter
+│   │   ├── chat/                   # Conversation list + message history
+│   │   ├── like/                   # Like / unlike with Redis cache
+│   │   ├── block/                  # Block / unblock users
+│   │   ├── ignore/                 # Ignore + ignored messages
+│   │   ├── notification/           # Push + DB notifications
+│   │   ├── report/                 # User reporting system
+│   │   ├── subscription/           # EPS payment + premium plans
+│   │   ├── album/                  # Photo album (max 10 photos)
+│   │   ├── dreamPartner/           # Match preference + suggestions
+│   │   ├── profileVisit/           # Profile visit tracking
+│   │   ├── personalityQuestion/    # Personality test
+│   │   └── geo/                    # Bangladesh divisions/districts/thanas
+│   └── routes/
+│       └── index.ts                # All module routes registered here
+├── middleWares/
+│   ├── auth.middleware.ts          # JWT verify + Redis cache + guards
+│   ├── rateLimiter.ts              # All rate limiters (12 limiters)
+│   ├── globalErrorHandler.ts       # Centralized error handling
+│   ├── notFound.ts                 # 404 handler
+│   └── validateRequest.ts          # Zod schema validation
+├── socket/
+│   ├── index.ts                    # Socket.IO init + pending notifications
+│   └── handlers/
+│       ├── chat.handlers.ts        # send-message, message delivery
+│       ├── presence.handlers.ts    # online/offline status
+│       ├── typing.handlers.ts      # typing indicators
+│       ├── seen.handlers.ts        # message seen status
+│       └── socketSingleton.ts      # Global io instance
+├── utils/
+│   ├── redis.ts                    # Redis client + helpers
+│   ├── token.utils.ts              # JWT sign/verify + refresh token (Redis)
+│   ├── profileQueryBuilder.ts      # MongoDB aggregation builder
+│   ├── subscriptioncron.ts         # Daily expiry + reminder cron jobs
+│   ├── epsHelper.ts                # EPS payment gateway helpers
+│   ├── currency.ts                 # IP → country → currency detection
+│   ├── mailer.ts                   # Match notification emails
+│   ├── catchAsync.ts               # Async error wrapper
+│   └── sendResponse.ts             # Standardized API response
+├── seeders/
+│   ├── seedSuperAdmin.ts           # Super admin seed
+│   ├── seedGeoData.ts              # Bangladesh geo data seed
+│   └── seedPersonalityQuestions.ts # Personality test questions seed
+├── helpers/
+│   └── AppError.ts                 # Custom error class
+└── config/
+    └── envConfig.ts                # Environment variable loader + validator
 ```
 
-#### Login Request Body
-```json
-{
-  "identifier": "01712345678",
-  "password": "pass1234"
-}
-```
-
-#### Login Response
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Login successful",
-  "data": {
-    "token": "<jwt_token>"
-  }
-}
-```
-
-> Token-এ থাকে: `id`, `phone`, `email`, `role`, `subscription`, `isVerified`, `isProfileCompleted`
-
 ---
 
-### Profile — `/api/v1/profiles`
+## 🛡️ Rate Limiting Architecture
 
-| Method | Endpoint | Auth | বর্ণনা |
-|---|---|---|---|
-| POST | `/` | ✅ | Profile তৈরি |
-| PATCH | `/` | ✅ | Profile update |
-| GET | `/` | ✅ | সব profile (filter + search + pagination) |
-| GET | `/my` | ✅ | নিজের profile |
-| GET | `/:id` | ✅ | নির্দিষ্ট profile |
+All routes are protected by a **two-layer Redis-backed distributed rate limiting** system. If Redis is unavailable, the system gracefully falls back to in-memory limiting with a console warning.
 
-#### Profile Query Parameters (GET `/`)
-| Param | Type | উদাহরণ |
-|---|---|---|
-| `search` | string | `?search=engineer` |
-| `gender` | string | `?gender=female` |
-| `division` | string | `?division=Dhaka` |
-| `district` | string | `?district=Gazipur` |
-| `thana` | string | `?thana=Tongi` |
-| `university` | string | `?university=BUET` |
-| `faith` | string | `?faith=Islam` |
-| `practiceLevel` | string | `?practiceLevel=Practicing` |
-| `educationVariety` | string | `?educationVariety=Engineering` |
-| `personality` | string | `?personality=Caring Soul` |
-| `habits` | string[] | `?habits=Reading Books&habits=Gaming` |
-| `minAge` | number | `?minAge=22` |
-| `maxAge` | number | `?maxAge=30` |
-| `page` | number | `?page=1` |
-| `limit` | number | `?limit=10` |
-| `sort` | string | `?sort=-createdAt` |
+### How the layers work
 
----
+```
+Incoming Request
+      │
+      ▼
+┌─────────────────────────┐
+│  Layer 1: Global Limiter │  ← IP-based, 500 req/15min
+│  (app.ts — all routes)   │  ← Blocks scrapers + unknown clients
+└────────────┬────────────┘
+             │
+             ▼
+┌─────────────────────────┐
+│  Layer 2: Route Limiter  │  ← userId or IP-based, per-feature
+│  (specific routes)       │  ← Fine-grained control
+└─────────────────────────┘
+```
 
-### Like — `/api/v1/likes`
+**Auth routes additionally have:**
+```
+Burst Limiter (20 req/sec) → then → Specific Limiter (window-based)
+```
 
-| Method | Endpoint | Auth | Subscription | বর্ণনা |
+### Rate Limit Table
+
+| Limiter | Applied To | Limit | Window | Key |
 |---|---|---|---|---|
-| POST | `/:userId` | ✅ | Free + Premium | Like / Unlike toggle |
-| GET | `/count/:userId` | ✅ | Free + Premium | কতটা like আছে |
-| GET | `/my-likes` | ✅ | Free + Premium | আমার দেওয়া like list (profile সহ) |
-| GET | `/who-liked-me` | ✅ | **Premium only** | কে আমাকে like দিয়েছে (profile সহ) |
+| **globalLimiter** | All routes (app.ts) | 500 req | 15 min | IP |
+| **burstLimiter** | Auth routes only | 20 req | 1 sec | IP |
+| **registerLimiter** | `POST /auth` | 5 req | 15 min | IP |
+| **loginLimiter** | `POST /auth/login` | 5 req | 15 min | IP |
+| **otpLimiter** | verify-otp, resend-otp, verify-reset-otp | 5 req | 10 min | IP + phone |
+| **forgotPasswordLimiter** | `POST /auth/forgot-password` | 5 req | 1 hour | IP |
+| **userLimiter** | Profile create/update | 200 req | 15 min | userId |
+| **profileSearchLimiter** | `GET /profile` | 60 req | 1 min | userId |
+| **likeLimiter** | `POST /likes/:userId` | 30 req | 1 min | userId |
+| **paymentLimiter** | `POST /subscriptions/initiate` | 10 req | 1 hour | userId |
+| **reportLimiter** | `POST /report/:userId` | 5 req | 1 hour | userId |
+| **albumLimiter** | Album add/update/delete | 20 req | 15 min | userId |
 
-#### Like Response (GET `/my-likes` বা `/who-liked-me`)
-```json
-{
-  "data": [
-    {
-      "userId": "64f1a2b3...",
-      "likedAt": "2026-03-28T10:30:00.000Z",
-      "profile": {
-        "gender": "female",
-        "profession": "Doctor",
-        "economicalStatus": "Medium",
-        "personality": "Caring Soul",
-        "religion": { "faith": "Islam", "practiceLevel": "Practicing" },
-        "address": {
-          "divisionId": { "name": "Dhaka" },
-          "districtId": { "name": "Gazipur" }
-        },
-        "userId": { "_id": "...", "name": "Fatima Khanam" }
-      }
-    }
-  ]
-}
-```
+### Rate Limit Response (HTTP 429)
 
-> Free user `/who-liked-me` call করলে **403** পাবে।
-
----
-
-### Chat — `/api/v1/chat`
-
-| Method | Endpoint | Auth | Subscription | বর্ণনা |
-|---|---|---|---|---|
-| GET | `/conversations` | ✅ | Free + Premium | Conversation list |
-| GET | `/:userId` | ✅ | **Premium only** | Chat history |
-
-#### Conversation List — Free User Response
-```json
-{
-  "data": [
-    {
-      "userId": "...",
-      "name": "Fatima",
-      "avatar": null,
-      "lastMessage": null,
-      "lastMessageType": null,
-      "lastMessageTime": "2026-03-28T...",
-      "unreadCount": 3,
-      "isLocked": true
-    }
-  ]
-}
-```
-
-> Free user-এ `lastMessage: null`, `isLocked: true` — frontend-এ lock icon দেখাবে।
-
----
-
-### Dream Partner — `/api/v1/dream-partner`
-
-| Method | Endpoint | Auth | বর্ণনা |
-|---|---|---|---|
-| POST | `/` | ✅ | Dream partner preference save/update |
-| GET | `/` | ✅ | Preference অনুযায়ী matching profiles |
-
-#### Save Preference Request Body
-```json
-{
-  "practiceLevel": "Practicing",
-  "economicalStatus": "Medium",
-  "habits": ["Reading Books", "Traveling"]
-}
-```
-
-> Matching score তিনটা criteria-তে calculate হয়: `practiceLevel`, `economicalStatus`, `habits`। Score বেশি হলে আগে দেখায়।
-
----
-
-### Personality Test — `/api/v1/personality`
-
-Guest user (login ছাড়া) personality test দিতে পারবে।
-
-| Method | Endpoint | Auth | বর্ণনা |
-|---|---|---|---|
-| GET | `/questions` | ❌ | সব প্রশ্ন |
-| POST | `/submit` | ❌ | উত্তর submit, result পাবে |
-| GET | `/:id` | ❌ | Result দেখা (email required) |
-| PATCH | `/:id` | ❌ | Guest profile update (name, email, gender) |
-
-#### Submit Request Body
-```json
-{
-  "answers": [
-    { "questionId": "64f...", "selectedOption": "agree" },
-    { "questionId": "64f...", "selectedOption": "sometimes" }
-  ]
-}
-```
-
-#### Personality Types
-| Type | বর্ণনা |
-|---|---|
-| `Caring Soul` | সম্পর্ক ও যত্নে বিশ্বাসী |
-| `Balanced Thinker` | আবেগ ও স্বাধীনতার মধ্যে ভারসাম্য |
-| `Ambitious Mind` | ক্যারিয়ার ও লক্ষ্যে সচেতন |
-
----
-
-### Geo (Location Data) — `/api/v1/geo`
-
-Auth লাগে না। Profile form fill করার সময় dropdown-এর জন্য।
-
-| Method | Endpoint | বর্ণনা |
-|---|---|---|
-| GET | `/universities` | সব university |
-| GET | `/divisions` | সব বিভাগ |
-| GET | `/divisions/:divisionId/districts` | বিভাগ অনুযায়ী জেলা |
-| GET | `/districts/:districtId/thanas` | জেলা অনুযায়ী থানা |
-
----
-
-## Real-time Socket.IO
-
-Socket connect করার সময় `token` query param পাঠাতে হবে:
-
-```js
-const socket = io("YOUR_SERVER_URL", {
-  query: { token: "USER_JWT_TOKEN" },
-  transports: ["websocket"],
-});
-```
-
-### Events
-
-| Event | Direction | বর্ণনা |
-|---|---|---|
-| `send-message` | Client → Server | Message পাঠানো (Premium only) |
-| `message-sent` | Server → Client | Send confirmation |
-| `receive-message` | Server → Client | নতুন message পাওয়া |
-| `typing` | দুইদিক | Typing indicator |
-| `stop-typing` | দুইদিক | Typing বন্ধ |
-| `seen` | Client → Server | Message দেখা হয়েছে |
-| `message-seen` | Server → Client | Sender-কে seen notification |
-| `error` | Server → Client | Error (যেমন subscription required) |
-| `unauthorized` | Server → Client | Invalid token |
-
-#### Send Message Payload
-```json
-{
-  "receiverId": "USER_ID",
-  "message": "Hello!",
-  "type": "text"
-}
-```
-
-> Free user `send-message` emit করলে `error` event আসবে: `{ code: "SUBSCRIPTION_REQUIRED" }`
-
----
-
-## Redis Caching
-
-| Cache Key | TTL | Invalidate কখন |
-|---|---|---|
-| `like:count:{userId}` | 5 মিনিট | Like/Unlike করলে |
-| `like:senders:{userId}` | 5 মিনিট | Like/Unlike করলে |
-| `like:given:{userId}` | 5 মিনিট | Like/Unlike করলে |
-| `profile:{userId}` | 10 মিনিট | Profile update করলে |
-| `onlineUsers` (hash) | — | Disconnect হলে |
-
----
-
-## Standard Response Format
-
-সব API-র response এই format-এ আসে:
-
-```json
-{
-  "statusCode": 200,
-  "success": true,
-  "message": "Success message",
-  "data": {},
-  "meta": {
-    "total": 100,
-    "page": 1,
-    "limit": 10,
-    "totalPages": 10
-  }
-}
-```
-
-Error response:
 ```json
 {
   "success": false,
-  "message": "Error message",
-  "errorSource": [
-    { "path": "email", "message": "Email is required" }
-  ]
+  "statusCode": 429,
+  "message": "Too many login attempts. Please wait 15 minutes before trying again."
 }
+```
+
+### Response Headers (automatically added)
+
+```
+RateLimit-Limit: 5
+RateLimit-Remaining: 3
+RateLimit-Reset: 1714320000
+```
+
+### Redis Key Pattern
+
+```
+rl:global:<IP>
+rl:login:<IP>
+rl:otp:<IP>:<phone>
+rl:user:<userId>
+rl:payment:<userId>
 ```
 
 ---
 
-## Seeders
+## 📡 API Reference
 
-Server start হলে automatically run হয়:
-
-| Seeder | কাজ |
-|---|---|
-| `seedGeoData` | বাংলাদেশের ৮ বিভাগ, সব জেলা, থানা seed করে |
-| `seedPersonalityQuestions` | ১৫টি personality test প্রশ্ন seed করে |
-| `seedSuperAdmin` | Super admin account তৈরি করে |
+Base URL: `http://localhost:5000/api/v1`
 
 ---
 
-## Authentication
+### 🔐 Auth — `/api/v1/auth`
 
-- **REST API:** `Authorization: <token>` header
-- **Socket.IO:** `?token=<token>` query param
-- Token-এ থাকে: `id`, `phone`, `email`, `role`, `subscription`, `isVerified`, `isProfileCompleted`
+| Method | Endpoint | Auth Required | Rate Limit | Description |
+|---|---|---|---|---|
+| POST | `/` | ❌ | burst + register | Register new user |
+| POST | `/verify-otp` | ❌ | burst + otp | Verify phone OTP |
+| POST | `/login` | ❌ | burst + login | Login with phone/email |
+| POST | `/resend-otp` | ❌ | burst + otp | Resend OTP |
+| POST | `/forgot-password` | ❌ | burst + forgotPassword | Send reset OTP |
+| POST | `/verify-reset-otp` | ❌ | burst + otp | Reset password with OTP |
+| POST | `/refresh` | ❌ | global | Refresh access token |
+| GET | `/me` | ✅ | global | Get my user data |
+| PATCH | `/` | ✅ | global | Update user info |
+| POST | `/reset-password` | ✅ | global | Change password |
+| PATCH | `/delete-profile/:id` | ✅ | global | Soft delete account |
+| PATCH | `/block-user/:id` | ✅ Admin | global | Block/unblock user |
 
 ---
 
-*ShadiMate Backend — v1.0*
+### 👤 Profile — `/api/v1/profile`
+
+| Method | Endpoint | Auth | Rate Limit | Description |
+|---|---|---|---|---|
+| POST | `/` | ✅ | userLimiter | Create profile |
+| PATCH | `/` | ✅ | userLimiter | Update profile |
+| GET | `/` | ✅ | profileSearch | Browse/search profiles |
+| GET | `/my` | ✅ | global | Get my profile |
+| GET | `/:userId` | ✅ | global | Get profile by userId |
+
+---
+
+### 💬 Chat — `/api/v1/chat`
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/conversations` | ✅ | All conversations |
+| GET | `/:userId` | ✅ | Chat history with a user |
+
+> **Note:** Real-time messaging is via Socket.IO (premium users only).
+
+---
+
+### 🔔 Notifications — `/api/v1/notifications`
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/` | ✅ | My notifications (paginated) |
+| GET | `/unread-count` | ✅ | Unread count |
+| PATCH | `/mark-all-read` | ✅ | Mark all as read |
+| PATCH | `/:id/read` | ✅ | Mark single as read |
+| DELETE | `/:id` | ✅ | Delete notification |
+
+---
+
+### ❤️ Likes — `/api/v1/likes`
+
+| Method | Endpoint | Auth | Rate Limit | Description |
+|---|---|---|---|---|
+| POST | `/:userId` | ✅ | likeLimiter | Like / unlike profile |
+| GET | `/count/:userId` | ✅ | global | Like count |
+| GET | `/who-liked-me` | ✅ Premium | global | Who liked me |
+| GET | `/my-likes` | ✅ | global | Profiles I liked |
+
+---
+
+### 🚫 Block — `/api/v1/block`
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/:userId` | ✅ | Toggle block/unblock |
+| GET | `/` | ✅ | My block list |
+| GET | `/status/:userId` | ✅ | Block status |
+
+---
+
+### 🙈 Ignore — `/api/v1/ignore`
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/:userId` | ✅ | Toggle ignore |
+| GET | `/` | ✅ | My ignore list |
+| GET | `/status/:userId` | ✅ | Ignore status |
+| GET | `/conversations` | ✅ | Ignored conversation list |
+| GET | `/messages/:senderId` | ✅ | Ignored messages from sender |
+| DELETE | `/messages/:senderId` | ✅ | Delete ignored messages |
+
+---
+
+### 🚨 Report — `/api/v1/report`
+
+| Method | Endpoint | Auth | Rate Limit | Description |
+|---|---|---|---|---|
+| POST | `/:userId` | ✅ | reportLimiter | Submit report |
+| GET | `/my` | ✅ | global | My submitted reports |
+| GET | `/` | ✅ Admin | global | All reports |
+| PATCH | `/:id/status` | ✅ Admin | global | Update report status |
+
+---
+
+### 💳 Subscription — `/api/v1/subscriptions`
+
+| Method | Endpoint | Auth | Rate Limit | Description |
+|---|---|---|---|---|
+| GET | `/plans` | ❌ | global | Available plans |
+| GET | `/currency` | ❌ | global | Detected currency by IP |
+| POST | `/initiate` | ✅ | paymentLimiter | Start payment |
+| GET | `/my` | ✅ | global | Active subscription |
+| GET | `/history` | ✅ | global | Payment history |
+| POST/GET | `/payment/success` | ❌ | none | EPS callback |
+| POST/GET | `/payment/fail` | ❌ | none | EPS callback |
+| POST/GET | `/payment/cancel` | ❌ | none | EPS callback |
+
+---
+
+### 📸 Album — `/api/v1/album`
+
+| Method | Endpoint | Auth | Rate Limit | Description |
+|---|---|---|---|---|
+| POST | `/add` | ✅ | albumLimiter | Add photo(s) (max 10) |
+| GET | `/` | ✅ | global | My album |
+| GET | `/:userId` | ✅ | global | User's album |
+| PATCH | `/:photoId` | ✅ | albumLimiter | Update photo |
+| DELETE | `/delete/:photoId` | ✅ | albumLimiter | Delete photo |
+
+---
+
+### 🌍 Geo — `/api/v1/geo`
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/universities` | ❌ | All universities (filter: type, search) |
+| GET | `/divisions` | ❌ | All divisions |
+| GET | `/divisions/:divisionId/districts` | ❌ | Districts under a division |
+| GET | `/districts/:districtId/thanas` | ❌ | Thanas under a district |
+
+---
+
+### 🧠 Personality Test — `/api/v1/personality-test`
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/questions` | ❌ | All 15 questions |
+| POST | `/submit` | ❌ | Submit test, get result |
+| GET | `/:id` | ❌ | Get single result |
+| PATCH | `/:id` | ❌ | Update guest profile (add email) |
+
+---
+
+### 💞 Dream Partner — `/api/v1/dream-partner`
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/` | ✅ | Save match preferences |
+| GET | `/` | ✅ | Get matched profiles |
+
+---
+
+### 👁️ Profile Visits — `/api/v1/profile-visits`
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/` | ✅ Premium | Who visited my profile |
+| GET | `/count` | ✅ | Total visit count |
+
+---
+
+## 🔌 Socket.IO Events
+
+Connect with token:
+```js
+const socket = io("http://localhost:5000", {
+  query: { token: "Bearer <accessToken>" }
+});
+```
+
+### Emit (Client → Server)
+
+| Event | Payload | Description |
+|---|---|---|
+| `send-message` | `{ receiverId, message, type }` | Send message (Premium only) |
+| `typing` | `{ toUserId }` | Typing indicator |
+| `stop-typing` | `{ toUserId }` | Stop typing |
+| `seen` | `{ messageId }` | Mark message as seen |
+
+### Listen (Server → Client)
+
+| Event | Payload | Description |
+|---|---|---|
+| `receive-message` | message object | New incoming message |
+| `message-sent` | message object | Confirmation of sent message |
+| `message-seen` | `{ messageId, conversationWith }` | Message read receipt |
+| `typing` | `{ fromUserId }` | Someone is typing |
+| `stop-typing` | `{ fromUserId }` | Stopped typing |
+| `user-online` | userId | User came online |
+| `user-offline` | `{ userId, lastSeen }` | User went offline |
+| `online-users` | userId[] | Currently online users |
+| `new-notification` | notification object | Real-time notification |
+| `pending-notifications` | notification[] | Unread notifications on connect |
+
+---
+
+## ⚙️ Subscription Plans
+
+| Plan | Duration | Price (BDT) |
+|---|---|---|
+| 1 Month | 30 days | ৳299 |
+| 3 Months | 90 days | ৳799 |
+| 6 Months | 180 days | ৳1,499 |
+
+> International users see approximate GBP prices. Actual charge is in BDT via EPS gateway.
+
+---
+
+## ⏰ Cron Jobs
+
+| Job | Schedule | Description |
+|---|---|---|
+| Subscription Expiry | Daily 00:01 | Marks expired subscriptions, resets users to `free` |
+| Expiry Reminder | Daily 10:00 | Notifies users with 1–2 days left |
+
+---
+
+## 🔑 Auth Flow
+
+```
+Register → OTP verify → Account created + Access Token issued
+Login → Password check → Access Token + Refresh Token
+Refresh → POST /auth/refresh with userId + refreshToken → New tokens
+Logout → Access token blacklisted in Redis + Refresh token revoked
+```
+
+**Token Storage (Redis):**
+```
+refresh:<userId>     → refresh token (30 days TTL)
+blacklist:<jti>      → blacklisted access token (TTL = remaining expiry)
+user:<userId>        → cached user data (5 min TTL)
+```
+
+---
+
+## 📝 Future TODOs
+
+- [ ] Payment idempotency key (prevent double-click duplicate payments)
+- [ ] EPS production URL switch (currently sandbox)
+- [ ] Image upload via Cloudinary / S3 (currently URL-based)
+- [ ] Admin dashboard endpoints
+- [ ] SMS OTP integration (currently returns OTP in response — dev only)
+
+---
+
+## 📄 License
+
+MIT

@@ -25,13 +25,17 @@ const REFRESH_TOKEN_PREFIX = "refresh:";
 const BLACKLIST_PREFIX = "blacklist:";
 // ─── Build Minimal Payload ────────────────────────────────────────────────────
 // ❌ phone & email intentionally excluded — PII should never go in JWT
-const buildTokenPayload = (user) => ({
-    id: user._id,
-    role: user.role,
-    isVerified: user.isVerified,
-    isProfileCompleted: user.isProfileCompleted,
-    subscription: user.subscription,
-});
+const buildTokenPayload = (user) => {
+    var _a;
+    return ({
+        id: String(user._id),
+        role: user.role,
+        isVerified: user.isVerified,
+        isProfileCompleted: user.isProfileCompleted,
+        subscription: user.subscription,
+        gender: (_a = user.gender) !== null && _a !== void 0 ? _a : "",
+    });
+};
 exports.buildTokenPayload = buildTokenPayload;
 // ─── Sign Access Token (15 min) ───────────────────────────────────────────────
 const signAccessToken = (payload) => jsonwebtoken_1.default.sign(payload, envConfig_1.envVars.JWT_SECRET, {

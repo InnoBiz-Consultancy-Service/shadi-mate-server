@@ -27,19 +27,17 @@ export const generateEPSHash = (data: string): string => {
 };
 
 // ─── Token Cache ──────────────────────────────────────────────────────────────
-// প্রতিবার নতুন token নিলে slow হয় — memory তে cache করে রাখবো
+
 let cachedToken: string | null = null;
 let tokenExpiry: Date | null = null;
 
 // ─── API No. 01: GetToken ─────────────────────────────────────────────────────
 export const getEPSToken = async (): Promise<string> => {
 
-    // Cache valid থাকলে সেটাই return করো
     if (cachedToken && tokenExpiry && new Date() < tokenExpiry) {
         return cachedToken;
     }
 
-    // x-hash: userName দিয়ে HMACSHA512 hash তৈরি করো
     const xHash = generateEPSHash(envVars.EPS_USERNAME);
 
     const response = await axios.post(
@@ -62,7 +60,6 @@ export const getEPSToken = async (): Promise<string> => {
 
     cachedToken = response.data.token;
 
-    // Expire হওয়ার ৫ মিনিট আগে নতুন token নেবো
     tokenExpiry = new Date(response.data.expireDate);
     tokenExpiry.setMinutes(tokenExpiry.getMinutes() - 5);
 
