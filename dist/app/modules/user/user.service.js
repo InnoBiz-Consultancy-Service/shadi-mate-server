@@ -55,7 +55,7 @@ const registerUser = (payload) => __awaiter(void 0, void 0, void 0, function* ()
     return {
         message: "OTP sent successfully. Please verify your phone number.",
         phone,
-        otp, // 🔴 DEVELOPMENT ONLY — remove in production
+        otp,
     };
 });
 // ─── Verify OTP & Auto-login ─────────────────────────────────────────────────
@@ -80,6 +80,7 @@ const verifyOtp = (payload) => __awaiter(void 0, void 0, void 0, function* () {
         isVerified: user.isVerified,
         isProfileCompleted: (_a = user.isProfileCompleted) !== null && _a !== void 0 ? _a : false,
         subscription: user.subscription,
+        gender: user.gender,
     });
     return {
         message: "Phone verified successfully. Account created!",
@@ -136,6 +137,7 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
             isVerified: user.isVerified,
             isProfileCompleted: (_a = user.isProfileCompleted) !== null && _a !== void 0 ? _a : false,
             subscription: user.subscription,
+            gender: user.gender,
         });
         return { message: "Login successful", accessToken, refreshToken, user };
     }
@@ -161,19 +163,12 @@ const loginUser = (payload) => __awaiter(void 0, void 0, void 0, function* () {
         isVerified: false,
         isProfileCompleted: false,
         subscription: "free",
+        gender: otpDoc.userData.gender,
     });
     return {
         message: "Login successful (pending verification)",
         accessToken,
         refreshToken: null,
-        user: {
-            name: otpDoc.userData.name,
-            email: otpDoc.userData.email,
-            phone: otpDoc.userData.phone,
-            gender: otpDoc.userData.gender,
-            isVerified: false,
-            subscription: "free",
-        },
     };
 });
 // ─── Refresh Access Token ─────────────────────────────────────────────────────
@@ -255,17 +250,12 @@ const resetPassword = (payload) => __awaiter(void 0, void 0, void 0, function* (
         isVerified: user.isVerified,
         isProfileCompleted: (_a = user.isProfileCompleted) !== null && _a !== void 0 ? _a : false,
         subscription: user.subscription,
+        gender: user.gender,
     });
     return {
         message: "Password changed successfully.",
         accessToken,
         refreshToken,
-        user: {
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            phone: user.phone,
-        },
     };
 });
 // ─── Get Me ───────────────────────────────────────────────────────────────────
@@ -315,7 +305,6 @@ const updateBlockStatus = (userId, isBlocked, requestUser) => __awaiter(void 0, 
     if (!user) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
     }
-    // ✅ Block হলে তাৎক্ষণিক পরের request-এই reject হবে
     yield Promise.all([
         (0, user_cache_1.invalidateUserCache)(userId),
         ...(isBlocked ? [(0, token_utils_1.revokeRefreshToken)(userId)] : []),
@@ -323,15 +312,11 @@ const updateBlockStatus = (userId, isBlocked, requestUser) => __awaiter(void 0, 
     return user;
 });
 // ─── Update Subscription ──────────────────────────────────────────────────────
-// ✅ এই service টা payment/subscription module থেকে call করতে হবে
-// যখনই subscription পরিবর্তন হবে — premium কেনা, cancel, expire
 const updateSubscription = (userId, subscription) => __awaiter(void 0, void 0, void 0, function* () {
     const user = yield user_model_1.User.findByIdAndUpdate(userId, { subscription }, { new: true }).lean();
     if (!user) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "User not found");
     }
-    // ✅ Cache invalidate — পরের request থেকেই নতুন subscription দেখাবে
-    // কোনো re-login লাগবে না
     yield (0, user_cache_1.invalidateUserCache)(userId);
     return user;
 });

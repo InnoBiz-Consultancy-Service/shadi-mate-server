@@ -30,7 +30,7 @@ const authorize = (...roles) => {
 exports.authorize = authorize;
 // ─── AUTHENTICATE ─────────────────────────────────────────────────────────────
 const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     try {
         const authHeader = req.headers.authorization;
         const cookieToken = (_a = req.cookies) === null || _a === void 0 ? void 0 : _a.accessToken;
@@ -63,7 +63,7 @@ const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, func
         // ─── DB fallback — cache miss হলে ────────────────────────────────────────
         if (!user) {
             const dbUser = yield user_model_1.User.findById(decoded.id)
-                .select("role isVerified isBlocked isDeleted isProfileCompleted subscription")
+                .select("role isVerified isBlocked isDeleted isProfileCompleted subscription gender")
                 .lean();
             if (!dbUser) {
                 throw new AppError_1.default(http_status_codes_1.StatusCodes.UNAUTHORIZED, "User not found");
@@ -76,6 +76,7 @@ const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, func
                 isDeleted: dbUser.isDeleted,
                 isProfileCompleted: (_b = dbUser.isProfileCompleted) !== null && _b !== void 0 ? _b : false,
                 subscription: (_c = dbUser.subscription) !== null && _c !== void 0 ? _c : "free",
+                gender: (_d = dbUser.gender) !== null && _d !== void 0 ? _d : "",
             };
             yield (0, user_cache_1.setCachedUser)(user);
         }
@@ -93,6 +94,7 @@ const authenticate = (req, _res, next) => __awaiter(void 0, void 0, void 0, func
             id: user._id,
             role: user.role,
             subscription: user.subscription,
+            gender: user.gender
         };
         next();
     }

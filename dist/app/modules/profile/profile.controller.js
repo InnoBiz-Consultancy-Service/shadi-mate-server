@@ -35,14 +35,17 @@ const updateProfile = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 
     });
 }));
 // ─── Get Profiles (Search + Filter) ─────────────────
+// profile.controller.ts
 const getProfiles = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const userId = req.user.id;
-    const result = yield profile_service_1.ProfileService.getProfiles(req.query, userId);
+    var _a, _b, _c;
+    console.log("👉 req.user:", req.user); // FULL USER
+    console.log("👉 gender:", (_a = req.user) === null || _a === void 0 ? void 0 : _a.gender);
+    const result = yield profile_service_1.ProfileService.getProfiles(req.query, (_b = req.user) === null || _b === void 0 ? void 0 : _b.id, ((_c = req.user) === null || _c === void 0 ? void 0 : _c.gender) || "");
     (0, sendResponse_1.sendResponse)(res, {
         statusCode: http_status_codes_1.StatusCodes.OK,
         success: true,
-        message: "Profiles retrieved successfully",
-        data: result
+        message: "Profiles fetched successfully",
+        data: result,
     });
 }));
 // ─── Get My Profile ─────────────────────────
