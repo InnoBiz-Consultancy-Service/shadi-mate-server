@@ -6,10 +6,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const subscription_controller_1 = require("./subscription.controller");
 const auth_middleware_1 = __importDefault(require("../../../middleWares/auth.middleware"));
+const rateLimiter_1 = require("../../../middleWares/rateLimiter");
 const SubscriptionRoutes = (0, express_1.Router)();
 // ─── Public ───────────────────────────────────────────────────────────────────
 SubscriptionRoutes.get("/plans", subscription_controller_1.SubscriptionController.getPlans);
 SubscriptionRoutes.get("/currency", subscription_controller_1.SubscriptionController.getUserCurrency);
+// EPS payment callbacks — gateway থেকে আসে, rate limit দেওয়া যাবে না
 SubscriptionRoutes.post("/payment/success", subscription_controller_1.SubscriptionController.paymentSuccess);
 SubscriptionRoutes.get("/payment/success", subscription_controller_1.SubscriptionController.paymentSuccess);
 SubscriptionRoutes.post("/payment/fail", subscription_controller_1.SubscriptionController.paymentFail);
@@ -17,8 +19,8 @@ SubscriptionRoutes.get("/payment/fail", subscription_controller_1.SubscriptionCo
 SubscriptionRoutes.post("/payment/cancel", subscription_controller_1.SubscriptionController.paymentCancel);
 SubscriptionRoutes.get("/payment/cancel", subscription_controller_1.SubscriptionController.paymentCancel);
 // ─── Protected ────────────────────────────────────────────────────────────────
-// POST /api/v1/subscriptions/initiate
-SubscriptionRoutes.post("/initiate", auth_middleware_1.default, subscription_controller_1.SubscriptionController.initiatePayment);
+// POST /api/v1/subscriptions/initiate — 10/hour per user (fraud prevention)
+SubscriptionRoutes.post("/initiate", auth_middleware_1.default, rateLimiter_1.paymentLimiter, subscription_controller_1.SubscriptionController.initiatePayment);
 // GET /api/v1/subscriptions/my
 SubscriptionRoutes.get("/my", auth_middleware_1.default, subscription_controller_1.SubscriptionController.getMySubscription);
 // GET /api/v1/subscriptions/history

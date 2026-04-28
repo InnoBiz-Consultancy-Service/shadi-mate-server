@@ -9,16 +9,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.redisDel = exports.redisSet = exports.redisGet = exports.checkRedisHealth = exports.connectRedis = void 0;
+exports.sendCommand = exports.redisDel = exports.redisSet = exports.redisGet = exports.checkRedisHealth = exports.connectRedis = void 0;
+// src/utils/redis.ts
 const redis_1 = require("redis");
 const envConfig_1 = require("../config/envConfig");
 const redisClient = (0, redis_1.createClient)({
     url: envConfig_1.envVars.REDIS_URL, // e.g. redis://localhost:6379
     socket: {
         reconnectStrategy: (retries) => {
-            // Maximum retry delay: 10 seconds
             const maxDelay = 10000;
-            // Exponential backoff with max delay
             const delay = Math.min(Math.pow(2, retries) * 100, maxDelay);
             console.log(`Redis reconnecting... Attempt ${retries + 1}, waiting ${delay}ms`);
             if (retries > 20) {
@@ -31,13 +30,11 @@ const redisClient = (0, redis_1.createClient)({
         keepAlive: true,
         noDelay: true,
     },
-    // Optional: Add retry strategy for commands
     commandsQueueMaxLength: 10000,
 });
-// Connection event handlers with detailed logging
+// Connection event handlers
 redisClient.on("error", (err) => {
     console.error("❌ Redis Error:", err);
-    // Handle specific error types
     if (err.code === 'ECONNRESET') {
         console.log("Connection reset by Redis server, will attempt to reconnect...");
     }
@@ -60,6 +57,15 @@ redisClient.on("reconnecting", () => {
 redisClient.on("end", () => {
     console.log("Redis connection ended");
 });
+// ✅ Add sendCommand method for rate-limit-redis compatibility
+// This is the key fix for the error
+const sendCommand = (...args) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!redisClient.isOpen) {
+        throw new Error("Redis client is not connected");
+    }
+    return redisClient.sendCommand(args);
+});
+exports.sendCommand = sendCommand;
 // Graceful shutdown
 const gracefulShutdown = () => __awaiter(void 0, void 0, void 0, function* () {
     console.log("Closing Redis connection...");
@@ -84,8 +90,6 @@ const connectRedis = () => __awaiter(void 0, void 0, void 0, function* () {
     }
     catch (error) {
         console.error("Failed to connect to Redis:", error);
-        // Don't throw, allow app to continue without Redis
-        // but log the error prominently
         console.warn("⚠️ Running without Redis cache - some features may be degraded");
     }
 });

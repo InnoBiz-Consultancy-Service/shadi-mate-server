@@ -39,17 +39,14 @@ const generateEPSHash = (data) => {
 };
 exports.generateEPSHash = generateEPSHash;
 // ─── Token Cache ──────────────────────────────────────────────────────────────
-// প্রতিবার নতুন token নিলে slow হয় — memory তে cache করে রাখবো
 let cachedToken = null;
 let tokenExpiry = null;
 // ─── API No. 01: GetToken ─────────────────────────────────────────────────────
 const getEPSToken = () => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c;
-    // Cache valid থাকলে সেটাই return করো
     if (cachedToken && tokenExpiry && new Date() < tokenExpiry) {
         return cachedToken;
     }
-    // x-hash: userName দিয়ে HMACSHA512 hash তৈরি করো
     const xHash = (0, exports.generateEPSHash)(envConfig_1.envVars.EPS_USERNAME);
     const response = yield axios_1.default.post(exports.EPS_URLS.GET_TOKEN, {
         userName: envConfig_1.envVars.EPS_USERNAME,
@@ -64,7 +61,6 @@ const getEPSToken = () => __awaiter(void 0, void 0, void 0, function* () {
         throw new Error(`EPS GetToken failed: ${(_c = (_b = response.data) === null || _b === void 0 ? void 0 : _b.errorMessage) !== null && _c !== void 0 ? _c : "Unknown error"}`);
     }
     cachedToken = response.data.token;
-    // Expire হওয়ার ৫ মিনিট আগে নতুন token নেবো
     tokenExpiry = new Date(response.data.expireDate);
     tokenExpiry.setMinutes(tokenExpiry.getMinutes() - 5);
     console.log("✅ EPS Token obtained, expires:", tokenExpiry);

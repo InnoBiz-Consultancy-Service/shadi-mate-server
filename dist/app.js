@@ -10,12 +10,14 @@ const notFound_1 = require("./middleWares/notFound");
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const index_1 = require("./app/routes/index ");
 const envConfig_1 = require("./config/envConfig");
+const rateLimiter_1 = require("./middleWares/rateLimiter");
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 app.use((0, cors_1.default)({
     origin: envConfig_1.envVars.FRONTEND_URL,
     credentials: true
 }));
+app.set('trust proxy', true);
 app.use((0, cookie_parser_1.default)());
 app.use("/api/v1", index_1.router);
 app.get("/", (req, res) => {
@@ -24,5 +26,6 @@ app.get("/", (req, res) => {
     });
 });
 app.use(globalErrorHandler_1.globalErrorHandler);
+app.use(rateLimiter_1.globalLimiter);
 app.use(notFound_1.notFoundHandler);
 exports.default = app;

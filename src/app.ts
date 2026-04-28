@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 
 import { router } from "./app/routes/index ";
 import { envVars } from "./config/envConfig";
+import { globalLimiter } from "./middleWares/rateLimiter";
 
 const app = express()
 
@@ -15,6 +16,7 @@ app.use(cors({
     origin: envVars.FRONTEND_URL,
     credentials:true
 }))
+app.set('trust proxy', true); 
 
 app.use(cookieParser());
 
@@ -27,7 +29,7 @@ app.get("/", (req: Request, res: Response) => {
 })
 
 app.use(globalErrorHandler)
-
+app.use(globalLimiter);
 app.use(notFoundHandler)
 
 export default app

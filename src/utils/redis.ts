@@ -1,14 +1,12 @@
+// src/utils/redis.ts
 import { createClient, RedisArgument } from "redis";
 import { envVars } from "../config/envConfig";
-import { RedisVariadicArgument } from "@redis/client/dist/lib/commands/generic-transformers";
 
 const redisClient = createClient({
     url: envVars.REDIS_URL, // e.g. redis://localhost:6379
     socket: {
         reconnectStrategy: (retries) => {
-            // Maximum retry delay: 10 seconds
             const maxDelay = 10000;
-            // Exponential backoff with max delay
             const delay = Math.min(Math.pow(2, retries) * 100, maxDelay);
             
             console.log(`Redis reconnecting... Attempt ${retries + 1}, waiting ${delay}ms`);
@@ -24,15 +22,13 @@ const redisClient = createClient({
         keepAlive: true,
         noDelay: true,
     },
-    // Optional: Add retry strategy for commands
     commandsQueueMaxLength: 10000,
 });
 
-// Connection event handlers with detailed logging
+// Connection event handlers
 redisClient.on("error", (err) => {
     console.error("❌ Redis Error:", err);
     
-    // Handle specific error types
     if (err.code === 'ECONNRESET') {
         console.log("Connection reset by Redis server, will attempt to reconnect...");
     } else if (err.code === 'ECONNREFUSED') {
@@ -58,6 +54,16 @@ redisClient.on("end", () => {
     console.log("Redis connection ended");
 });
 
+// ✅ Add sendCommand method for rate-limit-redis compatibility
+// This is the key fix for the error
+const sendCommand = async (...args: string[]): Promise<any> => {
+    if (!redisClient.isOpen) {
+        throw new Error("Redis client is not connected");
+    }
+  
+    return redisClient.sendCommand(args);
+};
+
 // Graceful shutdown
 const gracefulShutdown = async () => {
     console.log("Closing Redis connection...");
@@ -82,8 +88,6 @@ export const connectRedis = async () => {
         }
     } catch (error) {
         console.error("Failed to connect to Redis:", error);
-        // Don't throw, allow app to continue without Redis
-        // but log the error prominently
         console.warn("⚠️ Running without Redis cache - some features may be degraded");
     }
 };
@@ -131,7 +135,7 @@ export const redisSet = async (key: string, value: string, options: { expiry?: n
     }
 };
 
-export const redisDel = async (key: RedisVariadicArgument) => {
+export const redisDel = async (key: string | string[]) => {
     try {
         if (!redisClient.isOpen) {
             await connectRedis();
@@ -143,5 +147,8 @@ export const redisDel = async (key: RedisVariadicArgument) => {
         return false;
     }
 };
+
+// ✅ Export sendCommand for rate-limit-redis
+export { sendCommand };
 
 export default redisClient;

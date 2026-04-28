@@ -36,15 +36,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const report_controller_1 = require("./report.controller");
 const auth_middleware_1 = __importStar(require("../../../middleWares/auth.middleware"));
+const rateLimiter_1 = require("../../../middleWares/rateLimiter");
 const ReportRoutes = (0, express_1.Router)();
 // ─── User Routes ──────────────────────────────────────────────────────────────
-// POST /api/v1/reports/:userId
-ReportRoutes.post("/:userId", auth_middleware_1.default, report_controller_1.ReportController.submitReport);
-// GET /api/v1/reports/my 
+// POST /api/v1/report/:userId — 5/hour per user
+ReportRoutes.post("/:userId", auth_middleware_1.default, rateLimiter_1.reportLimiter, report_controller_1.ReportController.submitReport);
+// GET /api/v1/report/my
 ReportRoutes.get("/my", auth_middleware_1.default, report_controller_1.ReportController.getMyReports);
 // ─── Admin Routes ─────────────────────────────────────────────────────────────
-// GET /api/v1/reports 
+// GET /api/v1/report
 ReportRoutes.get("/", auth_middleware_1.default, (0, auth_middleware_1.authorize)("admin"), report_controller_1.ReportController.getAllReports);
-// PATCH /api/v1/reports/:id/status — Report status update (admin)
+// PATCH /api/v1/report/:id/status
 ReportRoutes.patch("/:id/status", auth_middleware_1.default, (0, auth_middleware_1.authorize)("admin"), report_controller_1.ReportController.updateReportStatus);
 exports.default = ReportRoutes;
