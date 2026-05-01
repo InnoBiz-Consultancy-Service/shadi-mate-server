@@ -13,6 +13,8 @@ import ReportRoutes from "../modules/report/report.route"
 import ProfileVisitRoutes from "../modules/profileVisit/profileVisit.route"
 import SubscriptionRoutes from "../modules/subscription/subscription.route"
 import { AlbumRoutes } from "../modules/album/album.route"
+import { EmailRoute } from "../modules/email/email.route"
+
 
 export const router = Router()
 
@@ -73,6 +75,10 @@ const moduleRoutes = [
     {
         path: "/album",
         route: AlbumRoutes
+    },
+    {
+        path: "/emails",
+        route: EmailRoute
     }
 ]
 

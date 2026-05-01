@@ -1,23 +1,34 @@
 import { Router } from "express";
 import { ReportController } from "./report.controller";
 import authenticate, { authorize } from "../../../middleWares/auth.middleware";
+import { reportLimiter } from "../../../middleWares/rateLimiter";
 
 const ReportRoutes = Router();
 
 // ─── User Routes ──────────────────────────────────────────────────────────────
 
-// POST /api/v1/reports/:userId
-ReportRoutes.post("/:userId", authenticate, ReportController.submitReport);
+// POST /api/v1/report/:userId — 5/hour per user
+ReportRoutes.post(
+  "/:userId",
+  authenticate,
+  reportLimiter,
+  ReportController.submitReport
+);
 
-// GET /api/v1/reports/my 
+// GET /api/v1/report/my
 ReportRoutes.get("/my", authenticate, ReportController.getMyReports);
 
 // ─── Admin Routes ─────────────────────────────────────────────────────────────
 
-// GET /api/v1/reports 
+// GET /api/v1/report
 ReportRoutes.get("/", authenticate, authorize("admin"), ReportController.getAllReports);
 
-// PATCH /api/v1/reports/:id/status — Report status update (admin)
-ReportRoutes.patch("/:id/status", authenticate, authorize("admin"), ReportController.updateReportStatus);
+// PATCH /api/v1/report/:id/status
+ReportRoutes.patch(
+  "/:id/status",
+  authenticate,
+  authorize("admin"),
+  ReportController.updateReportStatus
+);
 
 export default ReportRoutes;

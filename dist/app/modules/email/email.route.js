@@ -33,19 +33,21 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.EmailRoute = void 0;
 const express_1 = require("express");
-const report_controller_1 = require("./report.controller");
+const email_controller_1 = require("./email.controller");
 const auth_middleware_1 = __importStar(require("../../../middleWares/auth.middleware"));
-const rateLimiter_1 = require("../../../middleWares/rateLimiter");
-const ReportRoutes = (0, express_1.Router)();
-// ─── User Routes ──────────────────────────────────────────────────────────────
-// POST /api/v1/report/:userId — 5/hour per user
-ReportRoutes.post("/:userId", auth_middleware_1.default, rateLimiter_1.reportLimiter, report_controller_1.ReportController.submitReport);
-// GET /api/v1/report/my
-ReportRoutes.get("/my", auth_middleware_1.default, report_controller_1.ReportController.getMyReports);
-// ─── Admin Routes ─────────────────────────────────────────────────────────────
-// GET /api/v1/report
-ReportRoutes.get("/", auth_middleware_1.default, (0, auth_middleware_1.authorize)("admin"), report_controller_1.ReportController.getAllReports);
-// PATCH /api/v1/report/:id/status
-ReportRoutes.patch("/:id/status", auth_middleware_1.default, (0, auth_middleware_1.authorize)("admin"), report_controller_1.ReportController.updateReportStatus);
-exports.default = ReportRoutes;
+const router = (0, express_1.Router)();
+// send email (all / free / premium / selected)
+router.post("/send", auth_middleware_1.default, (0, auth_middleware_1.authorize)("admin"), email_controller_1.EmailController.sendEmail);
+// preview আগে দেখার জন্য
+router.post("/preview", auth_middleware_1.default, (0, auth_middleware_1.authorize)("admin"), email_controller_1.EmailController.preview);
+// search users (selected mode)
+router.get("/users/search", auth_middleware_1.default, (0, auth_middleware_1.authorize)("admin"), email_controller_1.EmailController.searchUsers);
+// stats
+router.get("/stats", auth_middleware_1.default, (0, auth_middleware_1.authorize)("admin"), email_controller_1.EmailController.getStats);
+// campaigns list
+router.get("/", auth_middleware_1.default, (0, auth_middleware_1.authorize)("admin"), email_controller_1.EmailController.getAllCampaigns);
+// single campaign
+router.get("/:id", auth_middleware_1.default, (0, auth_middleware_1.authorize)("admin"), email_controller_1.EmailController.getCampaignById);
+exports.EmailRoute = router;

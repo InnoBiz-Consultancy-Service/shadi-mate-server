@@ -19,6 +19,7 @@ const report_route_1 = __importDefault(require("../modules/report/report.route")
 const profileVisit_route_1 = __importDefault(require("../modules/profileVisit/profileVisit.route"));
 const subscription_route_1 = __importDefault(require("../modules/subscription/subscription.route"));
 const album_route_1 = require("../modules/album/album.route");
+const email_route_1 = require("../modules/email/email.route");
 exports.router = (0, express_1.Router)();
 const moduleRoutes = [
     {
@@ -76,6 +77,10 @@ const moduleRoutes = [
     {
         path: "/album",
         route: album_route_1.AlbumRoutes
+    },
+    {
+        path: "/emails",
+        route: email_route_1.EmailRoute
     }
 ];
 moduleRoutes.forEach((route) => {
