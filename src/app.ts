@@ -4,9 +4,9 @@ import { globalErrorHandler } from "./middleWares/globalErrorHandler";
 import { notFoundHandler } from "./middleWares/notFound";
 import cookieParser from "cookie-parser";
 
-import { router } from "./app/routes/index ";
 import { envVars } from "./config/envConfig";
 import { globalLimiter } from "./middleWares/rateLimiter";
+import { router } from "./app/routes/index ";
 
 const app = express()
 
@@ -20,7 +20,9 @@ app.set('trust proxy', true);
 
 app.use(cookieParser());
 
-app.use("/api/v1", router)
+app.use(globalLimiter);
+
+app.use("/api/v1", router);
 
 app.get("/", (req: Request, res: Response) => {
     res.status(200).json({
@@ -29,7 +31,7 @@ app.get("/", (req: Request, res: Response) => {
 })
 
 app.use(globalErrorHandler)
-app.use(globalLimiter);
+// app.use(globalLimiter);
 app.use(notFoundHandler)
 
-export default app
+export default app;
