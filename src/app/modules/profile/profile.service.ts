@@ -1,3 +1,4 @@
+// profile.service.ts
 import AppError from "../../../helpers/AppError";
 import { StatusCodes } from "http-status-codes";
 import { Profile } from "./profile.model";
@@ -8,6 +9,7 @@ import { invalidateProfileCache } from "../like/like.servce";
 import { calculateCompletionPercentage, getCompletionLabel } from "./profileCompletaion";
 import { Types } from "mongoose";
 import { DreamPartnerService } from "../dreamPartner/dreamPartner.service";
+import { toDisplayHeight, extractCmFromDisplayHeight } from "../../../utils/heightConverter";
 
 const checkProfileCompletion = (profile: any) => {
     return !!(
@@ -29,7 +31,13 @@ const createProfile = async (userId: string, payload: any) => {
         throw new AppError(StatusCodes.BAD_REQUEST, "User ID is required");
     }
 
-    const profile = await Profile.create({ ...payload, userId });
+    // Convert height if present
+    let processedPayload = { ...payload };
+    if (payload.height !== undefined && payload.height !== null) {
+        processedPayload.height = toDisplayHeight(payload.height);
+    }
+
+    const profile = await Profile.create({ ...processedPayload, userId });
 
     const completed = checkProfileCompletion(profile);
     await User.findByIdAndUpdate(userId, { isProfileCompleted: completed });
@@ -48,8 +56,12 @@ const createProfile = async (userId: string, payload: any) => {
 
 // ─── Update Profile ───────────────────────────────────────────────────────────
 const updateProfile = async (userId: string, payload: any) => {
-
     const updateData = { ...payload };
+
+    // Convert height if present
+    if (payload.height !== undefined && payload.height !== null) {
+        updateData.height = toDisplayHeight(payload.height);
+    }
 
     // ❗ undefined field remove করো
     Object.keys(updateData).forEach((key) => {
@@ -72,7 +84,8 @@ const updateProfile = async (userId: string, payload: any) => {
 };
 
 // ─── Get Profiles (Search + Filter) ──────────────────────────────────────────
-// profile.service.ts
+// profile.service.ts - Updated getProfiles function with height filter
+
 const getProfiles = async (
   query: QueryParams & {
     minAge?: number;
@@ -82,14 +95,17 @@ const getProfiles = async (
     practiceLevel?: string;
     personality?: string;
     habits?: string[];
+    minHeight?: number; // in cm
+    maxHeight?: number; // in cm
   },
   currentUserId: string,
-  currentUserGender: string, // ✅ নতুন param
+  currentUserGender: string,
 ) => {
   const {
-    search, university, division, district, thana, gender,
+    search, university, division, district, thana,
     minAge, maxAge, educationVariety, faith, practiceLevel,
-    personality, habits, page = 1, limit = 10, sort = "-createdAt",
+    personality, habits, minHeight, maxHeight,
+    page = 1, limit = 10, sort = "-createdAt",
   } = query;
 
   // ✅ Opposite gender calculate
@@ -97,24 +113,48 @@ const getProfiles = async (
 
   const builder = new AggregationBuilder(Profile);
 
-const lookups = [
-  {
-    $lookup: {
-      from: "users",
-      localField: "userId",
-      foreignField: "_id",
-      as: "user",
+  const lookups = [
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "user",
+      },
     },
-  },
-  {
-    $unwind: "$user", // ✅ THIS IS THE FIX
-  },
-
-  { $lookup: { from: "universities", localField: "education.graduation.universityId", foreignField: "_id", as: "university" } },
-  { $lookup: { from: "divisions", localField: "address.divisionId", foreignField: "_id", as: "division" } },
-  { $lookup: { from: "districts", localField: "address.districtId", foreignField: "_id", as: "district" } },
-  { $lookup: { from: "thanas", localField: "address.thanaId", foreignField: "_id", as: "thana" } },
-];
+    {
+      $lookup: {
+        from: "universities",
+        localField: "education.graduation.universityId",
+        foreignField: "_id",
+        as: "university",
+      },
+    },
+    {
+      $lookup: {
+        from: "divisions",
+        localField: "address.divisionId",
+        foreignField: "_id",
+        as: "division",
+      },
+    },
+    {
+      $lookup: {
+        from: "districts",
+        localField: "address.districtId",
+        foreignField: "_id",
+        as: "district",
+      },
+    },
+    {
+      $lookup: {
+        from: "thanas",
+        localField: "address.thanaId",
+        foreignField: "_id",
+        as: "thana",
+      },
+    },
+  ];
 
   builder.addLookups(lookups);
 
@@ -132,6 +172,67 @@ const lookups = [
   if (practiceLevel) builder.addMatch("religion.practiceLevel", practiceLevel);
   if (personality) builder.addMatch("personality", personality);
   if (habits?.length) builder.addMatch("habits", { $in: habits });
+
+  // ✅ Fixed Height filter using addProject
+  if (minHeight !== undefined || maxHeight !== undefined) {
+    // Add project stage to extract cm from height string
+    builder.addProject({
+      heightCm: {
+        $cond: {
+          if: { $ne: ["$height", null] },
+          then: {
+            $toInt: {
+              $arrayElemAt: [
+                { $split: [{ $arrayElemAt: [{ $split: ["$height", " - "] }, 1] }, "cm"] },
+                0
+              ]
+            }
+          },
+          else: null
+        }
+      },
+      // Keep all other fields
+      userId: 1,
+      birthDate: 1,
+      relation: 1,
+      fatherOccupation: 1,
+      motherOccupation: 1,
+      maritalStatus: 1,
+      address: 1,
+      education: 1,
+      religion: 1,
+      aboutMe: 1,
+      height: 1,
+      weight: 1,
+      skinTone: 1,
+      profession: 1,
+      salaryRange: 1,
+      economicalStatus: 1,
+      personality: 1,
+      habits: 1,
+      image: 1,
+      createdAt: 1,
+      updatedAt: 1,
+      user: 1,
+      university: 1,
+      division: 1,
+      district: 1,
+      thana: 1,
+    });
+    
+    // Add height filter conditions
+    const heightConditions = [];
+    if (minHeight !== undefined) {
+      heightConditions.push({ heightCm: { $gte: minHeight } });
+    }
+    if (maxHeight !== undefined) {
+      heightConditions.push({ heightCm: { $lte: maxHeight } });
+    }
+    
+    if (heightConditions.length > 0) {
+      builder.addMatch({ $and: heightConditions });
+    }
+  }
 
   if (minAge || maxAge) {
     const now = new Date();
@@ -151,13 +252,24 @@ const lookups = [
     ]);
   }
 
-  return await builder
+  const results = await builder
     .addSort(sort)
     .addPagination(Number(page), Number(limit))
     .build()
     .execute();
+    
+  // Remove temporary heightCm field from results if needed
+  if (results.data) {
+    results.data = results.data.map((item: any) => {
+      if (item.heightCm !== undefined) {
+        delete item.heightCm;
+      }
+      return item;
+    });
+  }
+    
+  return results;
 };
-
 // ─── Get My Profile ───────────────────────────────────────────────────────────
 const getMyProfile = async (userId: string) => {
     if (!userId) throw new AppError(StatusCodes.BAD_REQUEST, "User ID is required");

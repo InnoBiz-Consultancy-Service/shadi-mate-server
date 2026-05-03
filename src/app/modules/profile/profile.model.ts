@@ -6,6 +6,7 @@ import {
   EconomicalStatus,
   Habits,
 } from "./profile.interface";
+import { string } from "zod";
 
 // ─── Address Schema ─────────────────────────
 const addressSchema = new Schema(
@@ -139,7 +140,9 @@ const profileSchema = new Schema(
     },
 
     // ─── Physical (optional) ─────────────────────────
-    height: Number,
+    height:{
+      type: String,
+    },
     weight: Number,
     skinTone: String,
 

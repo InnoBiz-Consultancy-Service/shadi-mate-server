@@ -13,6 +13,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ProfileService = exports.getProfileByUserIdFromDB = void 0;
+// profile.service.ts
 const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const http_status_codes_1 = require("http-status-codes");
 const profile_model_1 = require("./profile.model");
@@ -22,6 +23,7 @@ const like_servce_1 = require("../like/like.servce");
 const profileCompletaion_1 = require("./profileCompletaion");
 const mongoose_1 = require("mongoose");
 const dreamPartner_service_1 = require("../dreamPartner/dreamPartner.service");
+const heightConverter_1 = require("../../../utils/heightConverter");
 const checkProfileCompletion = (profile) => {
     var _a, _b, _c, _d, _e;
     return !!(profile.gender &&
@@ -39,7 +41,12 @@ const createProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
     if (!userId) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "User ID is required");
     }
-    const profile = yield profile_model_1.Profile.create(Object.assign(Object.assign({}, payload), { userId }));
+    // Convert height if present
+    let processedPayload = Object.assign({}, payload);
+    if (payload.height !== undefined && payload.height !== null) {
+        processedPayload.height = (0, heightConverter_1.toDisplayHeight)(payload.height);
+    }
+    const profile = yield profile_model_1.Profile.create(Object.assign(Object.assign({}, processedPayload), { userId }));
     const completed = checkProfileCompletion(profile);
     yield user_model_1.User.findByIdAndUpdate(userId, { isProfileCompleted: completed });
     // ─── Cache invalidate ─────────────────────────────────────────────────────
@@ -55,6 +62,10 @@ const createProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
 // ─── Update Profile ───────────────────────────────────────────────────────────
 const updateProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     const updateData = Object.assign({}, payload);
+    // Convert height if present
+    if (payload.height !== undefined && payload.height !== null) {
+        updateData.height = (0, heightConverter_1.toDisplayHeight)(payload.height);
+    }
     // ❗ undefined field remove করো
     Object.keys(updateData).forEach((key) => {
         if (updateData[key] === undefined) {
@@ -68,9 +79,9 @@ const updateProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
     return profile;
 });
 // ─── Get Profiles (Search + Filter) ──────────────────────────────────────────
-// profile.service.ts
+// profile.service.ts - Updated getProfiles function with height filter
 const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 0, void 0, void 0, function* () {
-    const { search, university, division, district, thana, gender, minAge, maxAge, educationVariety, faith, practiceLevel, personality, habits, page = 1, limit = 10, sort = "-createdAt", } = query;
+    const { search, university, division, district, thana, minAge, maxAge, educationVariety, faith, practiceLevel, personality, habits, minHeight, maxHeight, page = 1, limit = 10, sort = "-createdAt", } = query;
     // ✅ Opposite gender calculate
     const oppositeGender = currentUserGender === "male" ? "female" : "male";
     const builder = new profileQueryBuilder_1.AggregationBuilder(profile_model_1.Profile);
@@ -84,12 +95,37 @@ const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 
             },
         },
         {
-            $unwind: "$user", // ✅ THIS IS THE FIX
+            $lookup: {
+                from: "universities",
+                localField: "education.graduation.universityId",
+                foreignField: "_id",
+                as: "university",
+            },
         },
-        { $lookup: { from: "universities", localField: "education.graduation.universityId", foreignField: "_id", as: "university" } },
-        { $lookup: { from: "divisions", localField: "address.divisionId", foreignField: "_id", as: "division" } },
-        { $lookup: { from: "districts", localField: "address.districtId", foreignField: "_id", as: "district" } },
-        { $lookup: { from: "thanas", localField: "address.thanaId", foreignField: "_id", as: "thana" } },
+        {
+            $lookup: {
+                from: "divisions",
+                localField: "address.divisionId",
+                foreignField: "_id",
+                as: "division",
+            },
+        },
+        {
+            $lookup: {
+                from: "districts",
+                localField: "address.districtId",
+                foreignField: "_id",
+                as: "district",
+            },
+        },
+        {
+            $lookup: {
+                from: "thanas",
+                localField: "address.thanaId",
+                foreignField: "_id",
+                as: "thana",
+            },
+        },
     ];
     builder.addLookups(lookups);
     builder.addMatch("userId", { $ne: new mongoose_1.Types.ObjectId(currentUserId) });
@@ -109,6 +145,64 @@ const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 
         builder.addMatch("personality", personality);
     if (habits === null || habits === void 0 ? void 0 : habits.length)
         builder.addMatch("habits", { $in: habits });
+    // ✅ Fixed Height filter using addProject
+    if (minHeight !== undefined || maxHeight !== undefined) {
+        // Add project stage to extract cm from height string
+        builder.addProject({
+            heightCm: {
+                $cond: {
+                    if: { $ne: ["$height", null] },
+                    then: {
+                        $toInt: {
+                            $arrayElemAt: [
+                                { $split: [{ $arrayElemAt: [{ $split: ["$height", " - "] }, 1] }, "cm"] },
+                                0
+                            ]
+                        }
+                    },
+                    else: null
+                }
+            },
+            // Keep all other fields
+            userId: 1,
+            birthDate: 1,
+            relation: 1,
+            fatherOccupation: 1,
+            motherOccupation: 1,
+            maritalStatus: 1,
+            address: 1,
+            education: 1,
+            religion: 1,
+            aboutMe: 1,
+            height: 1,
+            weight: 1,
+            skinTone: 1,
+            profession: 1,
+            salaryRange: 1,
+            economicalStatus: 1,
+            personality: 1,
+            habits: 1,
+            image: 1,
+            createdAt: 1,
+            updatedAt: 1,
+            user: 1,
+            university: 1,
+            division: 1,
+            district: 1,
+            thana: 1,
+        });
+        // Add height filter conditions
+        const heightConditions = [];
+        if (minHeight !== undefined) {
+            heightConditions.push({ heightCm: { $gte: minHeight } });
+        }
+        if (maxHeight !== undefined) {
+            heightConditions.push({ heightCm: { $lte: maxHeight } });
+        }
+        if (heightConditions.length > 0) {
+            builder.addMatch({ $and: heightConditions });
+        }
+    }
     if (minAge || maxAge) {
         const now = new Date();
         const ageFilter = {};
@@ -127,11 +221,21 @@ const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 
             "thana.name",
         ]);
     }
-    return yield builder
+    const results = yield builder
         .addSort(sort)
         .addPagination(Number(page), Number(limit))
         .build()
         .execute();
+    // Remove temporary heightCm field from results if needed
+    if (results.data) {
+        results.data = results.data.map((item) => {
+            if (item.heightCm !== undefined) {
+                delete item.heightCm;
+            }
+            return item;
+        });
+    }
+    return results;
 });
 // ─── Get My Profile ───────────────────────────────────────────────────────────
 const getMyProfile = (userId) => __awaiter(void 0, void 0, void 0, function* () {
