@@ -32,7 +32,7 @@ const conversationSchema = new mongoose_1.Schema({
         unique: true,
     },
     participantIds: {
-        type: [mongoose_1.Schema.Types.ObjectId],
+        type: [{ type: mongoose_1.Schema.Types.ObjectId, ref: "User" }],
         required: true,
     },
     lastMessage: { type: String, default: "" },

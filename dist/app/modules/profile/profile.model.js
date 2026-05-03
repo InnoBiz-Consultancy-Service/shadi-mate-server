@@ -114,7 +114,9 @@ const profileSchema = new mongoose_1.Schema({
         type: String,
     },
     // ─── Physical (optional) ─────────────────────────
-    height: Number,
+    height: {
+        type: String,
+    },
     weight: Number,
     skinTone: String,
     // ─── Career ─────────────────────────

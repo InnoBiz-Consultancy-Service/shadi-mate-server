@@ -77,7 +77,7 @@ exports.getConversationList = (0, catchAsync_1.catchAsync)((req, res) => __await
         .lean();
     const result = conversations.map((conv) => {
         var _a, _b, _c, _d, _e;
-        const otherUser = conv.participantIds.find((p) => { var _a; return ((_a = p === null || p === void 0 ? void 0 : p._id) === null || _a === void 0 ? void 0 : _a.toString()) !== user.id; });
+        const otherUser = conv.participantIds.find((p) => { var _a; return ((_a = p === null || p === void 0 ? void 0 : p._id) === null || _a === void 0 ? void 0 : _a.toString()) !== user.id.toString(); });
         const unreadCount = (_b = (_a = conv.unreadCounts) === null || _a === void 0 ? void 0 : _a[user.id]) !== null && _b !== void 0 ? _b : 0;
         const base = {
             userId: (_c = otherUser === null || otherUser === void 0 ? void 0 : otherUser._id) !== null && _c !== void 0 ? _c : null,

@@ -1,10 +1,13 @@
 // utils/aggregationBuilder.ts
+
 export class AggregationBuilder {
     private pipeline: any[] = [];
     private matchStage: any = {};
     private lookupStages: any[] = [];
     private sortStage: any = {};
     private paginationStage: any = {};
+    private projectStage: any = null; // Add project stage
+    private unwindStages: any[] = []; // Track unwinds separately
 
     constructor(private model: any) { }
 
@@ -21,8 +24,11 @@ export class AggregationBuilder {
     }
 
     // Add match condition
-    addMatch(field: string, value: any) {
-        if (value !== undefined && value !== null && value !== '') {
+    addMatch(field: string | object, value?: any) {
+        if (typeof field === 'object') {
+            // If field is an object, merge it with existing matchStage
+            this.matchStage = { ...this.matchStage, ...field };
+        } else if (value !== undefined && value !== null && value !== '') {
             this.matchStage[field] = value;
         }
         return this;
@@ -45,6 +51,12 @@ export class AggregationBuilder {
         return this;
     }
 
+    // Add project stage
+    addProject(projection: any) {
+        this.projectStage = projection;
+        return this;
+    }
+
     // Add sort
     addSort(sortString: string = '-createdAt') {
         if (sortString.startsWith('-')) {
@@ -64,30 +76,45 @@ export class AggregationBuilder {
 
     // Build the pipeline
     build() {
+        const pipeline: any[] = [];
+        
         // Add lookups first
-        this.pipeline.push(...this.lookupStages);
-
-        // Unwind stages after lookups
-        this.lookupStages.forEach((_, index) => {
-            const field = this.lookupStages[index].as || `lookup${index}`;
-            this.pipeline.push({
+        pipeline.push(...this.lookupStages);
+        
+        // Add unwind for each lookup if not already handled
+        this.lookupStages.forEach((lookup, index) => {
+            const as = lookup.as || `lookup${index}`;
+            pipeline.push({
                 $unwind: {
-                    path: `$${field}`,
+                    path: `$${as}`,
                     preserveNullAndEmptyArrays: true
                 }
             });
         });
-
-        // Add match stage if not empty
+        
+        // Add custom unwind stages if any
+        if (this.unwindStages.length > 0) {
+            pipeline.push(...this.unwindStages);
+        }
+        
+        // Add match stage
         if (Object.keys(this.matchStage).length > 0) {
-            this.pipeline.push({ $match: this.matchStage });
+            pipeline.push({ $match: this.matchStage });
         }
-
-        // Add sort
+        
+        // Add project stage
+        if (this.projectStage) {
+            pipeline.push({ $project: this.projectStage });
+        }
+        
+        // Add sort stage
         if (Object.keys(this.sortStage).length > 0) {
-            this.pipeline.push({ $sort: this.sortStage });
+            pipeline.push({ $sort: this.sortStage });
         }
-
+        
+        // Store pipeline for execution
+        this.pipeline = pipeline;
+        
         return this;
     }
 
@@ -95,10 +122,12 @@ export class AggregationBuilder {
     async execute() {
         // Build pipeline for data
         const dataPipeline = [...this.pipeline];
-
-        // Build pipeline for count
+        
+        // Build pipeline for count (remove project stage for count)
         const countPipeline = [...this.pipeline];
-
+        // Remove project stage from count pipeline if exists
+        const countPipelineWithoutProject = countPipeline.filter(stage => !stage.$project);
+        
         // Add pagination to data pipeline
         if (this.paginationStage.skip !== undefined) {
             dataPipeline.push({ $skip: this.paginationStage.skip });
@@ -106,23 +135,37 @@ export class AggregationBuilder {
         if (this.paginationStage.limit !== undefined) {
             dataPipeline.push({ $limit: this.paginationStage.limit });
         }
-
+        
         // Execute both queries
         const [data, countResult] = await Promise.all([
             this.model.aggregate(dataPipeline),
-            this.model.aggregate([...countPipeline, { $count: 'total' }])
+            this.model.aggregate([...countPipelineWithoutProject, { $count: 'total' }])
         ]);
-
+        
         const total = countResult[0]?.total || 0;
-
+        const limit = this.paginationStage.limit || 10;
+        const skip = this.paginationStage.skip || 0;
+        
         return {
             data,
             meta: {
-                page: this.paginationStage.skip / this.paginationStage.limit + 1 || 1,
-                limit: this.paginationStage.limit || 10,
+                page: Math.floor(skip / limit) + 1,
+                limit,
                 total,
-                totalPages: Math.ceil(total / (this.paginationStage.limit || 10))
+                totalPages: Math.ceil(total / limit)
             }
         };
+    }
+    
+    // Reset all stages (useful for reusing the builder)
+    reset() {
+        this.pipeline = [];
+        this.matchStage = {};
+        this.lookupStages = [];
+        this.sortStage = {};
+        this.paginationStage = {};
+        this.projectStage = null;
+        this.unwindStages = [];
+        return this;
     }
 }

@@ -1,4 +1,5 @@
 "use strict";
+// utils/aggregationBuilder.ts
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -10,7 +11,6 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AggregationBuilder = void 0;
-// utils/aggregationBuilder.ts
 class AggregationBuilder {
     constructor(model) {
         this.model = model;
@@ -19,6 +19,8 @@ class AggregationBuilder {
         this.lookupStages = [];
         this.sortStage = {};
         this.paginationStage = {};
+        this.projectStage = null; // Add project stage
+        this.unwindStages = []; // Track unwinds separately
     }
     // Add lookup stages
     addLookup(stage) {
@@ -32,7 +34,11 @@ class AggregationBuilder {
     }
     // Add match condition
     addMatch(field, value) {
-        if (value !== undefined && value !== null && value !== '') {
+        if (typeof field === 'object') {
+            // If field is an object, merge it with existing matchStage
+            this.matchStage = Object.assign(Object.assign({}, this.matchStage), field);
+        }
+        else if (value !== undefined && value !== null && value !== '') {
             this.matchStage[field] = value;
         }
         return this;
@@ -50,6 +56,11 @@ class AggregationBuilder {
             const regex = new RegExp(searchTerm.trim(), 'i');
             this.matchStage.$or = fields.map(field => ({ [field]: regex }));
         }
+        return this;
+    }
+    // Add project stage
+    addProject(projection) {
+        this.projectStage = projection;
         return this;
     }
     // Add sort
@@ -70,26 +81,37 @@ class AggregationBuilder {
     }
     // Build the pipeline
     build() {
+        const pipeline = [];
         // Add lookups first
-        this.pipeline.push(...this.lookupStages);
-        // Unwind stages after lookups
-        this.lookupStages.forEach((_, index) => {
-            const field = this.lookupStages[index].as || `lookup${index}`;
-            this.pipeline.push({
+        pipeline.push(...this.lookupStages);
+        // Add unwind for each lookup if not already handled
+        this.lookupStages.forEach((lookup, index) => {
+            const as = lookup.as || `lookup${index}`;
+            pipeline.push({
                 $unwind: {
-                    path: `$${field}`,
+                    path: `$${as}`,
                     preserveNullAndEmptyArrays: true
                 }
             });
         });
-        // Add match stage if not empty
+        // Add custom unwind stages if any
+        if (this.unwindStages.length > 0) {
+            pipeline.push(...this.unwindStages);
+        }
+        // Add match stage
         if (Object.keys(this.matchStage).length > 0) {
-            this.pipeline.push({ $match: this.matchStage });
+            pipeline.push({ $match: this.matchStage });
         }
-        // Add sort
+        // Add project stage
+        if (this.projectStage) {
+            pipeline.push({ $project: this.projectStage });
+        }
+        // Add sort stage
         if (Object.keys(this.sortStage).length > 0) {
-            this.pipeline.push({ $sort: this.sortStage });
+            pipeline.push({ $sort: this.sortStage });
         }
+        // Store pipeline for execution
+        this.pipeline = pipeline;
         return this;
     }
     // Execute with pagination
@@ -98,8 +120,10 @@ class AggregationBuilder {
             var _a;
             // Build pipeline for data
             const dataPipeline = [...this.pipeline];
-            // Build pipeline for count
+            // Build pipeline for count (remove project stage for count)
             const countPipeline = [...this.pipeline];
+            // Remove project stage from count pipeline if exists
+            const countPipelineWithoutProject = countPipeline.filter(stage => !stage.$project);
             // Add pagination to data pipeline
             if (this.paginationStage.skip !== undefined) {
                 dataPipeline.push({ $skip: this.paginationStage.skip });
@@ -110,19 +134,32 @@ class AggregationBuilder {
             // Execute both queries
             const [data, countResult] = yield Promise.all([
                 this.model.aggregate(dataPipeline),
-                this.model.aggregate([...countPipeline, { $count: 'total' }])
+                this.model.aggregate([...countPipelineWithoutProject, { $count: 'total' }])
             ]);
             const total = ((_a = countResult[0]) === null || _a === void 0 ? void 0 : _a.total) || 0;
+            const limit = this.paginationStage.limit || 10;
+            const skip = this.paginationStage.skip || 0;
             return {
                 data,
                 meta: {
-                    page: this.paginationStage.skip / this.paginationStage.limit + 1 || 1,
-                    limit: this.paginationStage.limit || 10,
+                    page: Math.floor(skip / limit) + 1,
+                    limit,
                     total,
-                    totalPages: Math.ceil(total / (this.paginationStage.limit || 10))
+                    totalPages: Math.ceil(total / limit)
                 }
             };
         });
+    }
+    // Reset all stages (useful for reusing the builder)
+    reset() {
+        this.pipeline = [];
+        this.matchStage = {};
+        this.lookupStages = [];
+        this.sortStage = {};
+        this.paginationStage = {};
+        this.projectStage = null;
+        this.unwindStages = [];
+        return this;
     }
 }
 exports.AggregationBuilder = AggregationBuilder;
