@@ -41,10 +41,10 @@ const conversationSchema = new Schema(
       unique: true,        
     },
 
-    participantIds: {
-      type: [Schema.Types.ObjectId],
-      required: true,
-    },
+   participantIds: {
+  type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+  required: true,
+},
 
     lastMessage:         { type: String,  default: "" },
     lastMessageType: {

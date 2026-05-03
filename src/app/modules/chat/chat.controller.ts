@@ -86,9 +86,9 @@ export const getConversationList = catchAsync(async (req: Request, res: Response
         .lean();
 
     const result = conversations.map((conv) => {
-        const otherUser = (conv.participantIds as any[]).find(
-            (p: any) => p?._id?.toString() !== user.id
-        );
+     const otherUser = (conv.participantIds as any[]).find(
+    (p: any) => p?._id?.toString() !== user.id.toString()
+);
 
         const unreadCount =
             (conv.unreadCounts as Record<string, number>)?.[user.id] ?? 0;

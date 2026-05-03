@@ -37,6 +37,8 @@
     "typescript-eslint": "^8.38.0"
   },
   "dependencies": {
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
     "axios": "^1.14.0",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
