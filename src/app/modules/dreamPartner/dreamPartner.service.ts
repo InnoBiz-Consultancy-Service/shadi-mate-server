@@ -6,6 +6,20 @@ import AppError from "../../../helpers/AppError";
 import { sendMatchEmail } from "../../../utils/mailer";
 import { User } from "../user/user.model";
 import mongoose from "mongoose";
+import { extractCmFromDisplayHeight } from "../../../utils/heightConverter"; // ✅ import this
+
+// Helper function to calculate age from birthDate
+const calculateAge = (birthDate: Date | null | undefined): number => {
+  if (!birthDate) return 0;
+  const today = new Date();
+  const birth = new Date(birthDate);
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age;
+};
 
 const savePreference = async (userId: string, payload: any) => {
     if (!userId) throw new AppError(StatusCodes.BAD_REQUEST, "User ID is required");
@@ -23,9 +37,6 @@ const savePreference = async (userId: string, payload: any) => {
     return await DreamPartnerPreference.create({ userId, ...payload });
 };
 
-
-
-// dreamPartner.service.ts
 const findMatches = async (
   userId: string,
   userGender: string,
@@ -34,7 +45,6 @@ const findMatches = async (
 ) => {
   const preference = await DreamPartnerPreference.findOne({ userId });
 
-  // ✅ FIX: no error
   if (!preference) {
     return {
       data: [],
@@ -47,10 +57,16 @@ const findMatches = async (
     };
   }
 
-  const { practiceLevel, economicalStatus, habits } = preference;
+  const { 
+    practiceLevel, 
+    economicalStatus, 
+    habits,
+    agePreference,
+    locationPreference,
+    heightPreference 
+  } = preference;
 
-  const oppositeGender =
-    userGender === "male" ? "female" : "male";
+  const oppositeGender = userGender === "male" ? "female" : "male";
 
   const matches = await Profile.aggregate([
     {
@@ -68,6 +84,55 @@ const findMatches = async (
         userId: { $ne: new mongoose.Types.ObjectId(userId) },
         "user.gender": oppositeGender,
       },
+    },
+
+    {
+      $addFields: {
+        calculatedAge: {
+          $floor: {
+            $divide: [
+              { $subtract: [new Date(), { $ifNull: ["$birthDate", new Date()] }] },
+              31556952000
+            ]
+          }
+        },
+        // ✅ Extract cm from display height using MongoDB expression
+        heightCm: {
+          $cond: {
+            if: { $ne: ["$height", null] },
+            then: {
+              $toInt: {
+                $arrayElemAt: [
+                  { $split: [{ $arrayElemAt: [{ $split: ["$height", " - "] }, 1] }, "cm"] },
+                  0
+                ]
+              }
+            },
+            else: 0
+          }
+        }
+      }
+    },
+
+    {
+      $match: {
+        ...(agePreference?.min && agePreference?.max && {
+          calculatedAge: {
+            $gte: agePreference.min,
+            $lte: agePreference.max
+          }
+        }),
+        ...(locationPreference?.divisionId && {
+          "address.divisionId": new mongoose.Types.ObjectId(locationPreference.divisionId)
+        }),
+        // ✅ Use numeric height comparison
+        ...(heightPreference?.min && heightPreference?.max && {
+          heightCm: {
+            $gte: parseInt(heightPreference.min),
+            $lte: parseInt(heightPreference.max)
+          }
+        })
+      }
     },
 
     {
@@ -102,37 +167,47 @@ const findMatches = async (
     },
   };
 };
+
 const notifyMatchingUsers = async (profile: any) => {
-    const newProfileUser = await User.findById(profile.userId).select("gender").lean();
+    if (!profile) return;
+
+    const userId = profile.userId;
+    
+    const newProfileUser = await User.findById(userId).select("gender").lean();
     if (!newProfileUser?.gender) return;
 
     const newProfileGender = newProfileUser.gender;
     const receiverGender = newProfileGender === "male" ? "female" : "male";
+    const newProfileAge = calculateAge(profile.birthDate);
+    
+    // ✅ Extract cm from display height using utility function
+    const profileHeightCm = profile.height ? extractCmFromDisplayHeight(profile.height) : 0;
 
-  const preferences = await DreamPartnerPreference.aggregate([
-  {
-    $lookup: {
-      from: "users",
-      localField: "userId",
-      foreignField: "_id",
-      as: "user",
-    },
-  },
-  {
-    $unwind: "$user", 
-  },
-  {
-    $match: {
-      "user.gender": receiverGender,
-      userId: {
-        $ne: new mongoose.Types.ObjectId(profile.userId.toString()),
+    const preferences = await DreamPartnerPreference.aggregate([
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "user",
+        },
       },
-    },
-  },
-]);
+      {
+        $unwind: "$user", 
+      },
+      {
+        $match: {
+          "user.gender": receiverGender,
+          userId: {
+            $ne: new mongoose.Types.ObjectId(userId),
+          },
+        },
+      },
+    ]);
+    
     for (const pref of preferences) {
         let score = 0;
-        const total = 3;
+        let total = 6;
 
         if (pref.practiceLevel === profile.religion?.practiceLevel) score++;
         if (pref.economicalStatus === profile.economicalStatus) score++;
@@ -142,12 +217,44 @@ const notifyMatchingUsers = async (profile: any) => {
         ) {
             score++;
         }
+        
+        if (
+            pref.agePreference &&
+            newProfileAge >= pref.agePreference.min &&
+            newProfileAge <= pref.agePreference.max
+        ) {
+            score++;
+        }
+        
+        if (pref.locationPreference) {
+            let locationMatch = false;
+            if (pref.locationPreference.divisionId && 
+                profile.address?.divisionId &&
+                pref.locationPreference.divisionId.toString() === profile.address.divisionId.toString()) {
+                locationMatch = true;
+            }
+            if (pref.locationPreference.districtId && 
+                profile.address?.districtId &&
+                pref.locationPreference.districtId.toString() === profile.address.districtId.toString()) {
+                locationMatch = true;
+            }
+            if (locationMatch) score++;
+        }
+        
+        // ✅ Use numeric cm values for height comparison
+        if (
+            pref.heightPreference &&
+            profileHeightCm &&
+            profileHeightCm >= parseInt(pref.heightPreference.min) &&
+            profileHeightCm <= parseInt(pref.heightPreference.max)
+        ) {
+            score++;
+        }
 
         const matchPercentage = (score / total) * 100;
 
         if (matchPercentage >= 40) {
-            const user = pref.user?.[0];
-
+            const user = pref.user;
             if (user?.email) {
                 await sendMatchEmail({
                     to: user.email,
