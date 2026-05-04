@@ -12,8 +12,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ProfileService = exports.getProfileByUserIdFromDB = exports.invalidateMyProfileCache = void 0;
-// profile.service.ts — OPTIMIZED
+exports.ProfileService = exports.invalidateMyProfileCache = void 0;
+// profile.service.ts — FULLY FIXED with height null safety
 const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const http_status_codes_1 = require("http-status-codes");
 const profile_model_1 = require("./profile.model");
@@ -25,13 +25,10 @@ const mongoose_1 = require("mongoose");
 const dreamPartner_service_1 = require("../dreamPartner/dreamPartner.service");
 const heightConverter_1 = require("../../../utils/heightConverter");
 const redis_1 = __importDefault(require("../../../utils/redis"));
-// ─── CHANGE 3: Redis Cache Keys for getMyProfile ──────────────────────────────
-// getMyProfile ছিল p95 = 2017ms। এখন cache থেকে দিলে ~5ms হবে।
-// key pattern: myprofile:userId
-// TTL: 5 minutes (300s) — profile বেশি change হয় না, 5 min stale safe
+// ─── Redis Cache Keys ──────────────────────────────────────────────
 const MY_PROFILE_CACHE_KEY = (userId) => `myprofile:${userId}`;
 const MY_PROFILE_CACHE_TTL = 60 * 5; // 5 minutes
-// ─── Cache invalidate helper (update/create profile এ call করো) ───────────────
+// ─── Cache invalidate helper ───────────────────────────────────────
 const invalidateMyProfileCache = (userId) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         yield redis_1.default.del(MY_PROFILE_CACHE_KEY(userId));
@@ -39,6 +36,25 @@ const invalidateMyProfileCache = (userId) => __awaiter(void 0, void 0, void 0, f
     catch (_) { /* silent fail */ }
 });
 exports.invalidateMyProfileCache = invalidateMyProfileCache;
+// ─── Helper: safe height conversion with null handling ────────────
+const safeConvertHeight = (height) => {
+    // null, undefined, empty string check
+    if (!height || height === null || height === undefined || height === "") {
+        return undefined;
+    }
+    // যদি ইতিমধ্যে valid format এ থাকে
+    if (typeof height === 'string' && height.includes('ft') && height.includes('in')) {
+        return height;
+    }
+    // Convert using the utility
+    const converted = (0, heightConverter_1.toDisplayHeight)(height);
+    // Validate conversion result
+    if (converted && (0, heightConverter_1.isValidHeight)(converted)) {
+        return converted;
+    }
+    return undefined;
+};
+// ─── Helper: check profile completion ──────────────────────────────
 const checkProfileCompletion = (profile) => {
     var _a, _b, _c, _d, _e;
     return !!(profile.gender &&
@@ -51,21 +67,27 @@ const checkProfileCompletion = (profile) => {
         profile.profession &&
         profile.habits);
 };
-// ─── Create Profile ───────────────────────────────────────────────────────────
+// ─── Create Profile ────────────────────────────────────────────────
 const createProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     if (!userId)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "User ID is required");
     let processedPayload = Object.assign({}, payload);
-    if (payload.height !== undefined && payload.height !== null) {
-        processedPayload.height = (0, heightConverter_1.toDisplayHeight)(payload.height);
+    // ✅ FIX: null height skip করে conversion
+    if (payload.height !== undefined && payload.height !== null && payload.height !== "") {
+        const convertedHeight = safeConvertHeight(payload.height);
+        if (convertedHeight) {
+            processedPayload.height = convertedHeight;
+        }
+        else {
+            delete processedPayload.height; // invalid height হলে skip
+        }
     }
     const profile = yield profile_model_1.Profile.create(Object.assign(Object.assign({}, processedPayload), { userId }));
     const completed = checkProfileCompletion(profile);
     yield user_model_1.User.findByIdAndUpdate(userId, { isProfileCompleted: completed });
-    // ─── Caches invalidate করো ────────────────────────────────────────────────
     yield Promise.all([
         (0, like_servce_1.invalidateProfileCache)(userId),
-        (0, exports.invalidateMyProfileCache)(userId), // ← NEW: myprofile cache
+        (0, exports.invalidateMyProfileCache)(userId),
     ]);
     try {
         yield dreamPartner_service_1.DreamPartnerService.notifyMatchingUsers(profile);
@@ -75,11 +97,23 @@ const createProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
     }
     return profile;
 });
-// ─── Update Profile ───────────────────────────────────────────────────────────
+// ─── Update Profile ────────────────────────────────────────────────
 const updateProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     const updateData = Object.assign({}, payload);
-    if (payload.height !== undefined && payload.height !== null) {
-        updateData.height = (0, heightConverter_1.toDisplayHeight)(payload.height);
+    // ✅ FIX: null height skip করে conversion
+    if (payload.height !== undefined) {
+        if (payload.height === null || payload.height === "") {
+            delete updateData.height; // null পাঠালে update করো না
+        }
+        else {
+            const convertedHeight = safeConvertHeight(payload.height);
+            if (convertedHeight) {
+                updateData.height = convertedHeight;
+            }
+            else {
+                delete updateData.height;
+            }
+        }
     }
     Object.keys(updateData).forEach((key) => {
         if (updateData[key] === undefined)
@@ -88,11 +122,10 @@ const updateProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
     const profile = yield profile_model_1.Profile.findOneAndUpdate({ userId }, updateData, { new: true, runValidators: true });
     if (!profile)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Profile not found");
-    // ─── Update করলে cache invalidate ────────────────────────────────────────
-    yield (0, exports.invalidateMyProfileCache)(userId); // ← NEW
+    yield (0, exports.invalidateMyProfileCache)(userId);
     return profile;
 });
-// ─── Get Profiles (Search + Filter) ──────────────────────────────────────────
+// ─── Get Profiles (Search + Filter) ────────────────────────────────
 const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 0, void 0, void 0, function* () {
     const { search, university, division, district, thana, minAge, maxAge, educationVariety, faith, practiceLevel, personality, habits, minHeight, maxHeight, page = 1, limit = 10, sort = "-createdAt", } = query;
     const oppositeGender = currentUserGender === "male" ? "female" : "male";
@@ -122,15 +155,22 @@ const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 
         builder.addMatch("personality", personality);
     if (habits === null || habits === void 0 ? void 0 : habits.length)
         builder.addMatch("habits", { $in: habits });
+    // ✅ FIXED: null safety for height conversion in aggregation
     if (minHeight !== undefined || maxHeight !== undefined) {
         builder.addProject({
             heightCm: {
                 $cond: {
-                    if: { $ne: ["$height", null] },
+                    if: { $and: [
+                            { $ne: ["$height", null] },
+                            { $ne: ["$height", ""] },
+                            { $ne: ["$height", undefined] },
+                            { $ne: ["$height", "null"] }
+                        ] },
                     then: {
                         $toInt: {
                             $arrayElemAt: [
-                                { $split: [{ $arrayElemAt: [{ $split: ["$height", " - "] }, 1] }, "cm"] }, 0
+                                { $split: [{ $arrayElemAt: [{ $split: ["$height", " - "] }, 1] }, "cm"] },
+                                0
                             ]
                         }
                     },
@@ -180,25 +220,21 @@ const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 
     }
     return results;
 });
-// ─── CHANGE 3 (main): getMyProfile with Redis Cache ──────────────────────────
-// আগে: প্রতিবার DB hit → 4-5 queries → p95 = 2017ms
-// এখন: Redis cache → p95 = 5-20ms (cache hit)
-// Cache miss হলে DB থেকে fetch করে cache এ store করে
+// ─── Get My Profile (with Redis Cache) ─────────────────────────────
 const getMyProfile = (userId) => __awaiter(void 0, void 0, void 0, function* () {
     if (!userId)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "User ID is required");
-    // ─── Step 1: Redis cache check ────────────────────────────────────────────
+    // Step 1: Redis cache check
     try {
         const cached = yield redis_1.default.get(MY_PROFILE_CACHE_KEY(userId));
         if (cached) {
-            // Cache hit — সরাসরি return করো, DB touch হবে না
             return JSON.parse(cached);
         }
     }
     catch (_) {
-        // Redis fail করলে DB fallback — app crash হবে না
+        // Redis fail করলে DB fallback
     }
-    // ─── Step 2: DB থেকে fetch (cache miss) ──────────────────────────────────
+    // Step 2: DB থেকে fetch
     const [profile, user] = yield Promise.all([
         profile_model_1.Profile.findOne({ userId })
             .populate("userId", "name phone email gender")
@@ -215,15 +251,16 @@ const getMyProfile = (userId) => __awaiter(void 0, void 0, void 0, function* () 
             key: f.key,
             label: f.label,
         })) });
-    // ─── Step 3: Redis এ cache করো ────────────────────────────────────────────
+    // Step 3: Redis এ cache
     try {
         yield redis_1.default.setEx(MY_PROFILE_CACHE_KEY(userId), MY_PROFILE_CACHE_TTL, JSON.stringify(result));
     }
     catch (_) {
-        // Cache store fail হলেও result return করো
+        // Cache fail হলেও result return করো
     }
     return result;
 });
+// ─── Get Profile By User ID ────────────────────────────────────────
 const getProfileByUserIdFromDB = (userId) => __awaiter(void 0, void 0, void 0, function* () {
     if (!mongoose_1.Types.ObjectId.isValid(userId)) {
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "Invalid user ID");
@@ -235,11 +272,10 @@ const getProfileByUserIdFromDB = (userId) => __awaiter(void 0, void 0, void 0, f
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Profile not found");
     return profile;
 });
-exports.getProfileByUserIdFromDB = getProfileByUserIdFromDB;
 exports.ProfileService = {
     createProfile,
     updateProfile,
     getProfiles,
     getMyProfile,
-    getProfileByUserIdFromDB: exports.getProfileByUserIdFromDB,
+    getProfileByUserIdFromDB,
 };
