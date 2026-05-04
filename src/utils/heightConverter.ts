@@ -26,14 +26,11 @@ export const parseFtInToCm = (ftIn: string): number => {
   return Math.round((feet * 12 + inches) * 2.54);
 };
 
-// ✅ MAIN FUNCTION — সবচেয়ে গুরুত্বপূর্ণ
 export const toDisplayHeight = (input: number | string | undefined | null): string | undefined => {
   // ✅ FIX 1: null/undefined/empty string check
   if (input === undefined || input === null || input === "") {
     return undefined;
-  }
-  
-  // ✅ FIX 2: যদি ইতিমধ্যে সঠিক format এ থাকে
+  }  
   if (typeof input === 'string' && input.includes('ft') && input.includes('in') && input.includes('cm')) {
     return input;
   }
