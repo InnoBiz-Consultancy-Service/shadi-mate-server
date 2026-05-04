@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ProfileController = exports.getProfileById = void 0;
+exports.ProfileController = void 0;
 const http_status_codes_1 = require("http-status-codes");
 const catchAsync_1 = require("../../../utils/catchAsync");
 const sendResponse_1 = require("../../../utils/sendResponse");
@@ -35,10 +35,9 @@ const updateProfile = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 
     });
 }));
 // ─── Get Profiles (Search + Filter) ─────────────────
-// profile.controller.ts
 const getProfiles = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c;
-    console.log("👉 req.user:", req.user); // FULL USER
+    console.log("👉 req.user:", req.user);
     console.log("👉 gender:", (_a = req.user) === null || _a === void 0 ? void 0 : _a.gender);
     const result = yield profile_service_1.ProfileService.getProfiles(req.query, (_b = req.user) === null || _b === void 0 ? void 0 : _b.id, ((_c = req.user) === null || _c === void 0 ? void 0 : _c.gender) || "");
     (0, sendResponse_1.sendResponse)(res, {
@@ -60,11 +59,12 @@ const getMyProfile = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0
     });
 }));
 // ─── Get Profile by ID ─────────────────────────
-exports.getProfileById = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const getProfileById = (0, catchAsync_1.catchAsync)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { userId } = req.params;
-    const result = yield (0, profile_service_1.getProfileByUserIdFromDB)(userId);
+    // ✅ ProfileService এর method ব্যবহার করুন
+    const result = yield profile_service_1.ProfileService.getProfileByUserIdFromDB(userId);
     (0, sendResponse_1.sendResponse)(res, {
-        statusCode: 200,
+        statusCode: http_status_codes_1.StatusCodes.OK,
         success: true,
         message: "Profile retrieved successfully",
         data: result,
@@ -75,5 +75,5 @@ exports.ProfileController = {
     updateProfile,
     getProfiles,
     getMyProfile,
-    getProfileById: exports.getProfileById
+    getProfileById
 };

@@ -2,12 +2,10 @@ import { Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import { catchAsync } from "../../../utils/catchAsync";
 import { sendResponse } from "../../../utils/sendResponse";
-import { getProfileByUserIdFromDB, ProfileService } from "./profile.service";
+import { ProfileService } from "./profile.service";
 
 const createProfile = catchAsync(async (req: Request, res: Response) => {
-
     const userId = req.user!.id;
-
     const result = await ProfileService.createProfile(userId, req.body);
 
     sendResponse(res, {
@@ -16,13 +14,10 @@ const createProfile = catchAsync(async (req: Request, res: Response) => {
         message: "Profile created successfully",
         data: result
     });
-
 });
 
 const updateProfile = catchAsync(async (req: Request, res: Response) => {
-
     const userId = req.user!.id;
-
     const result = await ProfileService.updateProfile(userId, req.body);
 
     sendResponse(res, {
@@ -31,28 +26,27 @@ const updateProfile = catchAsync(async (req: Request, res: Response) => {
         message: "Profile updated successfully",
         data: result
     });
-
 });
-
 
 // ─── Get Profiles (Search + Filter) ─────────────────
-
-// profile.controller.ts
 const getProfiles = catchAsync(async (req: Request, res: Response) => {
-     console.log("👉 req.user:", req.user); // FULL USER
-  console.log("👉 gender:", req.user?.gender); 
-  const result = await ProfileService.getProfiles(
-    req.query as any,
-    req.user?.id!,
-    req.user?.gender || "",
-  );
-  sendResponse(res, {
-    statusCode: StatusCodes.OK,
-    success: true,
-    message: "Profiles fetched successfully",
-    data: result,
-  });
+    console.log("👉 req.user:", req.user);
+    console.log("👉 gender:", req.user?.gender);
+    
+    const result = await ProfileService.getProfiles(
+        req.query as any,
+        req.user?.id!,
+        req.user?.gender || "",
+    );
+    
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: "Profiles fetched successfully",
+        data: result,
+    });
 });
+
 // ─── Get My Profile ─────────────────────────
 const getMyProfile = catchAsync(async (req: Request, res: Response) => {
     const userId = req.user!.id;
@@ -67,18 +61,20 @@ const getMyProfile = catchAsync(async (req: Request, res: Response) => {
 });
 
 // ─── Get Profile by ID ─────────────────────────
-export const getProfileById = catchAsync(async (req, res) => {
-  const { userId } = req.params;
+const getProfileById = catchAsync(async (req: Request, res: Response) => {
+    const { userId } = req.params;
+    
+    // ✅ ProfileService এর method ব্যবহার করুন
+    const result = await ProfileService.getProfileByUserIdFromDB(userId);
 
-  const result = await getProfileByUserIdFromDB(userId);
-
-  sendResponse(res, {
-    statusCode: 200,
-    success: true,
-    message: "Profile retrieved successfully",
-    data: result,
-  });
+    sendResponse(res, {
+        statusCode: StatusCodes.OK,
+        success: true,
+        message: "Profile retrieved successfully",
+        data: result,
+    });
 });
+
 export const ProfileController = {
     createProfile,
     updateProfile,
