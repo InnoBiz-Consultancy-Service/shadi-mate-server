@@ -12,8 +12,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ProfileService = exports.getProfileByUserIdFromDB = void 0;
-// profile.service.ts
+exports.ProfileService = exports.getProfileByUserIdFromDB = exports.invalidateMyProfileCache = void 0;
+// profile.service.ts — OPTIMIZED
 const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const http_status_codes_1 = require("http-status-codes");
 const profile_model_1 = require("./profile.model");
@@ -24,6 +24,21 @@ const profileCompletaion_1 = require("./profileCompletaion");
 const mongoose_1 = require("mongoose");
 const dreamPartner_service_1 = require("../dreamPartner/dreamPartner.service");
 const heightConverter_1 = require("../../../utils/heightConverter");
+const redis_1 = __importDefault(require("../../../utils/redis"));
+// ─── CHANGE 3: Redis Cache Keys for getMyProfile ──────────────────────────────
+// getMyProfile ছিল p95 = 2017ms। এখন cache থেকে দিলে ~5ms হবে।
+// key pattern: myprofile:userId
+// TTL: 5 minutes (300s) — profile বেশি change হয় না, 5 min stale safe
+const MY_PROFILE_CACHE_KEY = (userId) => `myprofile:${userId}`;
+const MY_PROFILE_CACHE_TTL = 60 * 5; // 5 minutes
+// ─── Cache invalidate helper (update/create profile এ call করো) ───────────────
+const invalidateMyProfileCache = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        yield redis_1.default.del(MY_PROFILE_CACHE_KEY(userId));
+    }
+    catch (_) { /* silent fail */ }
+});
+exports.invalidateMyProfileCache = invalidateMyProfileCache;
 const checkProfileCompletion = (profile) => {
     var _a, _b, _c, _d, _e;
     return !!(profile.gender &&
@@ -38,10 +53,8 @@ const checkProfileCompletion = (profile) => {
 };
 // ─── Create Profile ───────────────────────────────────────────────────────────
 const createProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
-    if (!userId) {
+    if (!userId)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "User ID is required");
-    }
-    // Convert height if present
     let processedPayload = Object.assign({}, payload);
     if (payload.height !== undefined && payload.height !== null) {
         processedPayload.height = (0, heightConverter_1.toDisplayHeight)(payload.height);
@@ -49,8 +62,11 @@ const createProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
     const profile = yield profile_model_1.Profile.create(Object.assign(Object.assign({}, processedPayload), { userId }));
     const completed = checkProfileCompletion(profile);
     yield user_model_1.User.findByIdAndUpdate(userId, { isProfileCompleted: completed });
-    // ─── Cache invalidate ─────────────────────────────────────────────────────
-    yield (0, like_servce_1.invalidateProfileCache)(userId);
+    // ─── Caches invalidate করো ────────────────────────────────────────────────
+    yield Promise.all([
+        (0, like_servce_1.invalidateProfileCache)(userId),
+        (0, exports.invalidateMyProfileCache)(userId), // ← NEW: myprofile cache
+    ]);
     try {
         yield dreamPartner_service_1.DreamPartnerService.notifyMatchingUsers(profile);
     }
@@ -62,70 +78,31 @@ const createProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, fun
 // ─── Update Profile ───────────────────────────────────────────────────────────
 const updateProfile = (userId, payload) => __awaiter(void 0, void 0, void 0, function* () {
     const updateData = Object.assign({}, payload);
-    // Convert height if present
     if (payload.height !== undefined && payload.height !== null) {
         updateData.height = (0, heightConverter_1.toDisplayHeight)(payload.height);
     }
-    // ❗ undefined field remove করো
     Object.keys(updateData).forEach((key) => {
-        if (updateData[key] === undefined) {
+        if (updateData[key] === undefined)
             delete updateData[key];
-        }
     });
     const profile = yield profile_model_1.Profile.findOneAndUpdate({ userId }, updateData, { new: true, runValidators: true });
-    if (!profile) {
+    if (!profile)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Profile not found");
-    }
+    // ─── Update করলে cache invalidate ────────────────────────────────────────
+    yield (0, exports.invalidateMyProfileCache)(userId); // ← NEW
     return profile;
 });
 // ─── Get Profiles (Search + Filter) ──────────────────────────────────────────
-// profile.service.ts - Updated getProfiles function with height filter
 const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 0, void 0, void 0, function* () {
     const { search, university, division, district, thana, minAge, maxAge, educationVariety, faith, practiceLevel, personality, habits, minHeight, maxHeight, page = 1, limit = 10, sort = "-createdAt", } = query;
-    // ✅ Opposite gender calculate
     const oppositeGender = currentUserGender === "male" ? "female" : "male";
     const builder = new profileQueryBuilder_1.AggregationBuilder(profile_model_1.Profile);
     const lookups = [
-        {
-            $lookup: {
-                from: "users",
-                localField: "userId",
-                foreignField: "_id",
-                as: "user",
-            },
-        },
-        {
-            $lookup: {
-                from: "universities",
-                localField: "education.graduation.universityId",
-                foreignField: "_id",
-                as: "university",
-            },
-        },
-        {
-            $lookup: {
-                from: "divisions",
-                localField: "address.divisionId",
-                foreignField: "_id",
-                as: "division",
-            },
-        },
-        {
-            $lookup: {
-                from: "districts",
-                localField: "address.districtId",
-                foreignField: "_id",
-                as: "district",
-            },
-        },
-        {
-            $lookup: {
-                from: "thanas",
-                localField: "address.thanaId",
-                foreignField: "_id",
-                as: "thana",
-            },
-        },
+        { $lookup: { from: "users", localField: "userId", foreignField: "_id", as: "user" } },
+        { $lookup: { from: "universities", localField: "education.graduation.universityId", foreignField: "_id", as: "university" } },
+        { $lookup: { from: "divisions", localField: "address.divisionId", foreignField: "_id", as: "division" } },
+        { $lookup: { from: "districts", localField: "address.districtId", foreignField: "_id", as: "district" } },
+        { $lookup: { from: "thanas", localField: "address.thanaId", foreignField: "_id", as: "thana" } },
     ];
     builder.addLookups(lookups);
     builder.addMatch("userId", { $ne: new mongoose_1.Types.ObjectId(currentUserId) });
@@ -145,9 +122,7 @@ const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 
         builder.addMatch("personality", personality);
     if (habits === null || habits === void 0 ? void 0 : habits.length)
         builder.addMatch("habits", { $in: habits });
-    // ✅ Fixed Height filter using addProject
     if (minHeight !== undefined || maxHeight !== undefined) {
-        // Add project stage to extract cm from height string
         builder.addProject({
             heightCm: {
                 $cond: {
@@ -155,53 +130,27 @@ const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 
                     then: {
                         $toInt: {
                             $arrayElemAt: [
-                                { $split: [{ $arrayElemAt: [{ $split: ["$height", " - "] }, 1] }, "cm"] },
-                                0
+                                { $split: [{ $arrayElemAt: [{ $split: ["$height", " - "] }, 1] }, "cm"] }, 0
                             ]
                         }
                     },
                     else: null
                 }
             },
-            // Keep all other fields
-            userId: 1,
-            birthDate: 1,
-            relation: 1,
-            fatherOccupation: 1,
-            motherOccupation: 1,
-            maritalStatus: 1,
-            address: 1,
-            education: 1,
-            religion: 1,
-            aboutMe: 1,
-            height: 1,
-            weight: 1,
-            skinTone: 1,
-            profession: 1,
-            salaryRange: 1,
-            economicalStatus: 1,
-            personality: 1,
-            habits: 1,
-            image: 1,
-            createdAt: 1,
-            updatedAt: 1,
-            user: 1,
-            university: 1,
-            division: 1,
-            district: 1,
-            thana: 1,
+            userId: 1, birthDate: 1, relation: 1, fatherOccupation: 1,
+            motherOccupation: 1, maritalStatus: 1, address: 1, education: 1,
+            religion: 1, aboutMe: 1, height: 1, weight: 1, skinTone: 1,
+            profession: 1, salaryRange: 1, economicalStatus: 1,
+            personality: 1, habits: 1, image: 1, createdAt: 1, updatedAt: 1,
+            user: 1, university: 1, division: 1, district: 1, thana: 1,
         });
-        // Add height filter conditions
         const heightConditions = [];
-        if (minHeight !== undefined) {
+        if (minHeight !== undefined)
             heightConditions.push({ heightCm: { $gte: minHeight } });
-        }
-        if (maxHeight !== undefined) {
+        if (maxHeight !== undefined)
             heightConditions.push({ heightCm: { $lte: maxHeight } });
-        }
-        if (heightConditions.length > 0) {
+        if (heightConditions.length)
             builder.addMatch({ $and: heightConditions });
-        }
     }
     if (minAge || maxAge) {
         const now = new Date();
@@ -214,11 +163,8 @@ const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 
     }
     if (search) {
         builder.addSearch(search, [
-            "user.name",
-            "education.graduation.institution",
-            "division.name",
-            "district.name",
-            "thana.name",
+            "user.name", "education.graduation.institution",
+            "division.name", "district.name", "thana.name",
         ]);
     }
     const results = yield builder
@@ -226,21 +172,33 @@ const getProfiles = (query, currentUserId, currentUserGender) => __awaiter(void 
         .addPagination(Number(page), Number(limit))
         .build()
         .execute();
-    // Remove temporary heightCm field from results if needed
     if (results.data) {
         results.data = results.data.map((item) => {
-            if (item.heightCm !== undefined) {
-                delete item.heightCm;
-            }
+            delete item.heightCm;
             return item;
         });
     }
     return results;
 });
-// ─── Get My Profile ───────────────────────────────────────────────────────────
+// ─── CHANGE 3 (main): getMyProfile with Redis Cache ──────────────────────────
+// আগে: প্রতিবার DB hit → 4-5 queries → p95 = 2017ms
+// এখন: Redis cache → p95 = 5-20ms (cache hit)
+// Cache miss হলে DB থেকে fetch করে cache এ store করে
 const getMyProfile = (userId) => __awaiter(void 0, void 0, void 0, function* () {
     if (!userId)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.BAD_REQUEST, "User ID is required");
+    // ─── Step 1: Redis cache check ────────────────────────────────────────────
+    try {
+        const cached = yield redis_1.default.get(MY_PROFILE_CACHE_KEY(userId));
+        if (cached) {
+            // Cache hit — সরাসরি return করো, DB touch হবে না
+            return JSON.parse(cached);
+        }
+    }
+    catch (_) {
+        // Redis fail করলে DB fallback — app crash হবে না
+    }
+    // ─── Step 2: DB থেকে fetch (cache miss) ──────────────────────────────────
     const [profile, user] = yield Promise.all([
         profile_model_1.Profile.findOne({ userId })
             .populate("userId", "name phone email gender")
@@ -252,12 +210,19 @@ const getMyProfile = (userId) => __awaiter(void 0, void 0, void 0, function* () 
     ]);
     if (!profile)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Profile not found");
-    // ─── Completion percentage ────────────────────────────────────────────────
     const completion = (0, profileCompletaion_1.calculateCompletionPercentage)(user, profile);
-    return Object.assign(Object.assign({}, profile), { completionPercentage: completion.percentage, completionLabel: (0, profileCompletaion_1.getCompletionLabel)(completion.percentage), missingFields: completion.missingFields.map((f) => ({
+    const result = Object.assign(Object.assign({}, profile), { completionPercentage: completion.percentage, completionLabel: (0, profileCompletaion_1.getCompletionLabel)(completion.percentage), missingFields: completion.missingFields.map((f) => ({
             key: f.key,
             label: f.label,
         })) });
+    // ─── Step 3: Redis এ cache করো ────────────────────────────────────────────
+    try {
+        yield redis_1.default.setEx(MY_PROFILE_CACHE_KEY(userId), MY_PROFILE_CACHE_TTL, JSON.stringify(result));
+    }
+    catch (_) {
+        // Cache store fail হলেও result return করো
+    }
+    return result;
 });
 const getProfileByUserIdFromDB = (userId) => __awaiter(void 0, void 0, void 0, function* () {
     if (!mongoose_1.Types.ObjectId.isValid(userId)) {
@@ -266,9 +231,8 @@ const getProfileByUserIdFromDB = (userId) => __awaiter(void 0, void 0, void 0, f
     const profile = yield profile_model_1.Profile.findOne({ userId })
         .populate("userId", "name email")
         .lean();
-    if (!profile) {
+    if (!profile)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Profile not found");
-    }
     return profile;
 });
 exports.getProfileByUserIdFromDB = getProfileByUserIdFromDB;
@@ -277,5 +241,5 @@ exports.ProfileService = {
     updateProfile,
     getProfiles,
     getMyProfile,
-    getProfileByUserIdFromDB: exports.getProfileByUserIdFromDB
+    getProfileByUserIdFromDB: exports.getProfileByUserIdFromDB,
 };

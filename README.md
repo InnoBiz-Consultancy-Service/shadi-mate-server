@@ -1,495 +1,412 @@
-# 💍 ShadiMate — Backend API
+# ShadiMate Server
 
-A production-ready matrimony platform backend built with **Node.js**, **Express**, **TypeScript**, **MongoDB**, **Redis**, and **Socket.IO**.
-
----
-
-## 📦 Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Runtime | Node.js + TypeScript |
-| Framework | Express.js |
-| Database | MongoDB (Mongoose ODM) |
-| Cache / Session | Redis (node-redis v4) |
-| Real-time | Socket.IO |
-| Auth | JWT (Access + Refresh Tokens) + Redis blacklist |
-| Payment | EPS Payment Gateway |
-| Email | Nodemailer (SMTP) |
-| Rate Limiting | express-rate-limit + rate-limit-redis |
-| Task Scheduler | node-cron |
+A matrimony platform backend built with Node.js, Express, MongoDB, Redis, and Socket.IO.
 
 ---
 
-## 🚀 Getting Started
+## Tech Stack
 
-### Prerequisites
+- **Runtime:** Node.js + TypeScript
+- **Framework:** Express.js
+- **Database:** MongoDB (Mongoose)
+- **Cache:** Redis
+- **Real-time:** Socket.IO
+- **Auth:** JWT (Access + Refresh Token)
+- **Payment:** EPS Payment Gateway
+- **Email:** Nodemailer
+- **Validation:** Zod
+- **Rate Limiting:** express-rate-limit + Redis Store
 
-- Node.js >= 18
-- MongoDB (local or Atlas)
-- Redis (local or Upstash)
+---
 
-### Installation
+## Project Structure
 
-```bash
-# 1. Clone the repository
-git clone <repo-url>
-cd shadi-mate-server
-
-# 2. Install dependencies
-npm install
-
-# 3. Install rate limiting packages
-npm install express-rate-limit rate-limit-redis
+```
+src/
+├── app/
+│   ├── modules/
+│   │   ├── user/           # Auth, register, login, OTP
+│   │   ├── profile/        # Profile CRUD, search, filter
+│   │   ├── chat/           # Conversation list, message history
+│   │   ├── like/           # Like / unlike profiles
+│   │   ├── block/          # Block / unblock users
+│   │   ├── ignore/         # Ignore users + ignored messages
+│   │   ├── report/         # Report users
+│   │   ├── notification/   # Push notifications
+│   │   ├── subscription/   # Premium plans + EPS payment
+│   │   ├── album/          # Photo album
+│   │   ├── dreamPartner/   # Dream partner matching
+│   │   ├── personalityQuestion/ # Personality test
+│   │   ├── profileVisit/   # Profile visit tracking
+│   │   ├── geo/            # Divisions, Districts, Thanas, Universities
+│   │   └── email/          # Admin email campaigns
+│   └── routes/
+│       └── index.ts        # All routes registered here
+├── config/
+│   └── envConfig.ts        # Environment variables
+├── middleWares/
+│   ├── auth.middleware.ts  # JWT + Redis cache auth
+│   ├── rateLimiter.ts      # All rate limiters
+│   ├── globalErrorHandler.ts
+│   ├── notFound.ts
+│   └── validateRequest.ts  # Zod validation
+├── socket/
+│   ├── index.ts            # Socket.IO init
+│   └── handlers/
+│       ├── chat.handlers.ts
+│       ├── presence.handlers.ts
+│       ├── seen.handlers.ts
+│       └── typing.handlers.ts
+├── seeders/
+│   ├── seedSuperAdmin.ts
+│   ├── seedGeoData.ts
+│   └── seedPersonalityQuestions.ts
+├── utils/
+│   ├── redis.ts
+│   ├── token.utils.ts
+│   ├── ensureIndexes.ts    # MongoDB indexes
+│   ├── profileQueryBuilder.ts
+│   ├── currency.ts         # BDT/GBP conversion
+│   ├── epsHelper.ts        # EPS payment helper
+│   ├── mailer.ts           # Email sender
+│   ├── catchAsync.ts
+│   └── sendResponse.ts
+├── app.ts                  # Express app setup
+└── server.ts               # Server entry point
 ```
 
-### Environment Variables
+---
+
+## Environment Variables
 
 Create a `.env` file in the root:
 
 ```env
-# Server
 PORT=5000
 NODE_ENV=development
 
 # MongoDB
-DB_URL=mongodb://localhost:27017/shadiMate
+DB_URL=mongodb+srv://username:password@cluster.mongodb.net/shadiMateDB
 
 # JWT
-JWT_SECRET=your_jwt_secret_key_minimum_32_chars
+JWT_SECRET=your_jwt_secret_key
 JWT_EXPIRES_IN=2d
 
 # Redis
 REDIS_URL=redis://localhost:6379
 
-# CORS / URLs
-FRONTEND_URL=http://localhost:3000
-BACKEND_URL=http://localhost:5000/api/v1
+# Admin
+SUPER_ADMIN_EMAIL=admin@shadimate.com
+SUPER_ADMIN_PASSWORD=Admin@123456
+BCRYPT_SALT_ROUND=12
 
-# Super Admin Seed
-SUPER_ADMIN_EMAIL=admin@shadiMate.com
-SUPER_ADMIN_PASSWORD=your_strong_admin_password
+# URLs
+FRONTEND_URL=https://shadimate-client.vercel.app
+BACKEND_URL=https://your-server.onrender.com/api/v1
 
-# EPS Payment Gateway (Sandbox)
+# EPS Payment Gateway
 EPS_HASH_KEY=your_eps_hash_key
-EPS_USERNAME=your_eps_username
 EPS_PASSWORD=your_eps_password
+EPS_USERNAME=your_eps_username
 EPS_STORE_ID=your_store_id
 EPS_MERCHANT_ID=your_merchant_id
 
-# SMTP (Email)
+# SMTP Email
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your_email@gmail.com
 SMTP_PASS=your_app_password
-
-# Bcrypt
-BCRYPT_SALT_ROUND=12
 ```
 
-### Run
+---
+
+## Installation
 
 ```bash
-# Development (hot reload)
+# Clone the repo
+git clone https://github.com/your-username/shadi-mate-server.git
+cd shadi-mate-server
+
+# Install dependencies
+npm install
+
+# Install compression (if not already installed)
+npm install compression
+npm install -D @types/compression
+
+# Run in development
 npm run dev
 
-# Production build
+# Build
 npm run build
+
+# Run production
 npm start
 ```
 
 ---
 
-## 🏗️ Project Structure
-
-```
-src/
-├── app.ts                          # Express app setup (trust proxy, global limiter)
-├── server.ts                       # Server start, DB connect, seeders, cron
-├── app/
-│   ├── modules/
-│   │   ├── user/                   # Auth (register, login, OTP, JWT)
-│   │   ├── profile/                # Profile CRUD + search/filter
-│   │   ├── chat/                   # Conversation list + message history
-│   │   ├── like/                   # Like / unlike with Redis cache
-│   │   ├── block/                  # Block / unblock users
-│   │   ├── ignore/                 # Ignore + ignored messages
-│   │   ├── notification/           # Push + DB notifications
-│   │   ├── report/                 # User reporting system
-│   │   ├── subscription/           # EPS payment + premium plans
-│   │   ├── album/                  # Photo album (max 10 photos)
-│   │   ├── dreamPartner/           # Match preference + suggestions
-│   │   ├── profileVisit/           # Profile visit tracking
-│   │   ├── personalityQuestion/    # Personality test
-│   │   └── geo/                    # Bangladesh divisions/districts/thanas
-│   └── routes/
-│       └── index.ts                # All module routes registered here
-├── middleWares/
-│   ├── auth.middleware.ts          # JWT verify + Redis cache + guards
-│   ├── rateLimiter.ts              # All rate limiters (12 limiters)
-│   ├── globalErrorHandler.ts       # Centralized error handling
-│   ├── notFound.ts                 # 404 handler
-│   └── validateRequest.ts          # Zod schema validation
-├── socket/
-│   ├── index.ts                    # Socket.IO init + pending notifications
-│   └── handlers/
-│       ├── chat.handlers.ts        # send-message, message delivery
-│       ├── presence.handlers.ts    # online/offline status
-│       ├── typing.handlers.ts      # typing indicators
-│       ├── seen.handlers.ts        # message seen status
-│       └── socketSingleton.ts      # Global io instance
-├── utils/
-│   ├── redis.ts                    # Redis client + helpers
-│   ├── token.utils.ts              # JWT sign/verify + refresh token (Redis)
-│   ├── profileQueryBuilder.ts      # MongoDB aggregation builder
-│   ├── subscriptioncron.ts         # Daily expiry + reminder cron jobs
-│   ├── epsHelper.ts                # EPS payment gateway helpers
-│   ├── currency.ts                 # IP → country → currency detection
-│   ├── mailer.ts                   # Match notification emails
-│   ├── catchAsync.ts               # Async error wrapper
-│   └── sendResponse.ts             # Standardized API response
-├── seeders/
-│   ├── seedSuperAdmin.ts           # Super admin seed
-│   ├── seedGeoData.ts              # Bangladesh geo data seed
-│   └── seedPersonalityQuestions.ts # Personality test questions seed
-├── helpers/
-│   └── AppError.ts                 # Custom error class
-└── config/
-    └── envConfig.ts                # Environment variable loader + validator
-```
-
----
-
-## 🛡️ Rate Limiting Architecture
-
-All routes are protected by a **two-layer Redis-backed distributed rate limiting** system. If Redis is unavailable, the system gracefully falls back to in-memory limiting with a console warning.
-
-### How the layers work
-
-```
-Incoming Request
-      │
-      ▼
-┌─────────────────────────┐
-│  Layer 1: Global Limiter │  ← IP-based, 500 req/15min
-│  (app.ts — all routes)   │  ← Blocks scrapers + unknown clients
-└────────────┬────────────┘
-             │
-             ▼
-┌─────────────────────────┐
-│  Layer 2: Route Limiter  │  ← userId or IP-based, per-feature
-│  (specific routes)       │  ← Fine-grained control
-└─────────────────────────┘
-```
-
-**Auth routes additionally have:**
-```
-Burst Limiter (20 req/sec) → then → Specific Limiter (window-based)
-```
-
-### Rate Limit Table
-
-| Limiter | Applied To | Limit | Window | Key |
-|---|---|---|---|---|
-| **globalLimiter** | All routes (app.ts) | 500 req | 15 min | IP |
-| **burstLimiter** | Auth routes only | 20 req | 1 sec | IP |
-| **registerLimiter** | `POST /auth` | 5 req | 15 min | IP |
-| **loginLimiter** | `POST /auth/login` | 5 req | 15 min | IP |
-| **otpLimiter** | verify-otp, resend-otp, verify-reset-otp | 5 req | 10 min | IP + phone |
-| **forgotPasswordLimiter** | `POST /auth/forgot-password` | 5 req | 1 hour | IP |
-| **userLimiter** | Profile create/update | 200 req | 15 min | userId |
-| **profileSearchLimiter** | `GET /profile` | 60 req | 1 min | userId |
-| **likeLimiter** | `POST /likes/:userId` | 30 req | 1 min | userId |
-| **paymentLimiter** | `POST /subscriptions/initiate` | 10 req | 1 hour | userId |
-| **reportLimiter** | `POST /report/:userId` | 5 req | 1 hour | userId |
-| **albumLimiter** | Album add/update/delete | 20 req | 15 min | userId |
-
-### Rate Limit Response (HTTP 429)
-
-```json
-{
-  "success": false,
-  "statusCode": 429,
-  "message": "Too many login attempts. Please wait 15 minutes before trying again."
-}
-```
-
-### Response Headers (automatically added)
-
-```
-RateLimit-Limit: 5
-RateLimit-Remaining: 3
-RateLimit-Reset: 1714320000
-```
-
-### Redis Key Pattern
-
-```
-rl:global:<IP>
-rl:login:<IP>
-rl:otp:<IP>:<phone>
-rl:user:<userId>
-rl:payment:<userId>
-```
-
----
-
-## 📡 API Reference
-
-Base URL: `http://localhost:5000/api/v1`
-
----
-
-### 🔐 Auth — `/api/v1/auth`
-
-| Method | Endpoint | Auth Required | Rate Limit | Description |
-|---|---|---|---|---|
-| POST | `/` | ❌ | burst + register | Register new user |
-| POST | `/verify-otp` | ❌ | burst + otp | Verify phone OTP |
-| POST | `/login` | ❌ | burst + login | Login with phone/email |
-| POST | `/resend-otp` | ❌ | burst + otp | Resend OTP |
-| POST | `/forgot-password` | ❌ | burst + forgotPassword | Send reset OTP |
-| POST | `/verify-reset-otp` | ❌ | burst + otp | Reset password with OTP |
-| POST | `/refresh` | ❌ | global | Refresh access token |
-| GET | `/me` | ✅ | global | Get my user data |
-| PATCH | `/` | ✅ | global | Update user info |
-| POST | `/reset-password` | ✅ | global | Change password |
-| PATCH | `/delete-profile/:id` | ✅ | global | Soft delete account |
-| PATCH | `/block-user/:id` | ✅ Admin | global | Block/unblock user |
-
----
-
-### 👤 Profile — `/api/v1/profile`
-
-| Method | Endpoint | Auth | Rate Limit | Description |
-|---|---|---|---|---|
-| POST | `/` | ✅ | userLimiter | Create profile |
-| PATCH | `/` | ✅ | userLimiter | Update profile |
-| GET | `/` | ✅ | profileSearch | Browse/search profiles |
-| GET | `/my` | ✅ | global | Get my profile |
-| GET | `/:userId` | ✅ | global | Get profile by userId |
-
----
-
-### 💬 Chat — `/api/v1/chat`
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/conversations` | ✅ | All conversations |
-| GET | `/:userId` | ✅ | Chat history with a user |
-
-> **Note:** Real-time messaging is via Socket.IO (premium users only).
-
----
-
-### 🔔 Notifications — `/api/v1/notifications`
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/` | ✅ | My notifications (paginated) |
-| GET | `/unread-count` | ✅ | Unread count |
-| PATCH | `/mark-all-read` | ✅ | Mark all as read |
-| PATCH | `/:id/read` | ✅ | Mark single as read |
-| DELETE | `/:id` | ✅ | Delete notification |
-
----
-
-### ❤️ Likes — `/api/v1/likes`
-
-| Method | Endpoint | Auth | Rate Limit | Description |
-|---|---|---|---|---|
-| POST | `/:userId` | ✅ | likeLimiter | Like / unlike profile |
-| GET | `/count/:userId` | ✅ | global | Like count |
-| GET | `/who-liked-me` | ✅ Premium | global | Who liked me |
-| GET | `/my-likes` | ✅ | global | Profiles I liked |
-
----
-
-### 🚫 Block — `/api/v1/block`
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| POST | `/:userId` | ✅ | Toggle block/unblock |
-| GET | `/` | ✅ | My block list |
-| GET | `/status/:userId` | ✅ | Block status |
-
----
-
-### 🙈 Ignore — `/api/v1/ignore`
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| POST | `/:userId` | ✅ | Toggle ignore |
-| GET | `/` | ✅ | My ignore list |
-| GET | `/status/:userId` | ✅ | Ignore status |
-| GET | `/conversations` | ✅ | Ignored conversation list |
-| GET | `/messages/:senderId` | ✅ | Ignored messages from sender |
-| DELETE | `/messages/:senderId` | ✅ | Delete ignored messages |
-
----
-
-### 🚨 Report — `/api/v1/report`
-
-| Method | Endpoint | Auth | Rate Limit | Description |
-|---|---|---|---|---|
-| POST | `/:userId` | ✅ | reportLimiter | Submit report |
-| GET | `/my` | ✅ | global | My submitted reports |
-| GET | `/` | ✅ Admin | global | All reports |
-| PATCH | `/:id/status` | ✅ Admin | global | Update report status |
-
----
-
-### 💳 Subscription — `/api/v1/subscriptions`
-
-| Method | Endpoint | Auth | Rate Limit | Description |
-|---|---|---|---|---|
-| GET | `/plans` | ❌ | global | Available plans |
-| GET | `/currency` | ❌ | global | Detected currency by IP |
-| POST | `/initiate` | ✅ | paymentLimiter | Start payment |
-| GET | `/my` | ✅ | global | Active subscription |
-| GET | `/history` | ✅ | global | Payment history |
-| POST/GET | `/payment/success` | ❌ | none | EPS callback |
-| POST/GET | `/payment/fail` | ❌ | none | EPS callback |
-| POST/GET | `/payment/cancel` | ❌ | none | EPS callback |
-
----
-
-### 📸 Album — `/api/v1/album`
-
-| Method | Endpoint | Auth | Rate Limit | Description |
-|---|---|---|---|---|
-| POST | `/add` | ✅ | albumLimiter | Add photo(s) (max 10) |
-| GET | `/` | ✅ | global | My album |
-| GET | `/:userId` | ✅ | global | User's album |
-| PATCH | `/:photoId` | ✅ | albumLimiter | Update photo |
-| DELETE | `/delete/:photoId` | ✅ | albumLimiter | Delete photo |
-
----
-
-### 🌍 Geo — `/api/v1/geo`
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/universities` | ❌ | All universities (filter: type, search) |
-| GET | `/divisions` | ❌ | All divisions |
-| GET | `/divisions/:divisionId/districts` | ❌ | Districts under a division |
-| GET | `/districts/:districtId/thanas` | ❌ | Thanas under a district |
-
----
-
-### 🧠 Personality Test — `/api/v1/personality-test`
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/questions` | ❌ | All 15 questions |
-| POST | `/submit` | ❌ | Submit test, get result |
-| GET | `/:id` | ❌ | Get single result |
-| PATCH | `/:id` | ❌ | Update guest profile (add email) |
-
----
-
-### 💞 Dream Partner — `/api/v1/dream-partner`
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| POST | `/` | ✅ | Save match preferences |
-| GET | `/` | ✅ | Get matched profiles |
-
----
-
-### 👁️ Profile Visits — `/api/v1/profile-visits`
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/` | ✅ Premium | Who visited my profile |
-| GET | `/count` | ✅ | Total visit count |
-
----
-
-## 🔌 Socket.IO Events
-
-Connect with token:
-```js
-const socket = io("http://localhost:5000", {
-  query: { token: "Bearer <accessToken>" }
-});
-```
-
-### Emit (Client → Server)
-
-| Event | Payload | Description |
+## API Endpoints
+
+Base URL: `https://your-server.onrender.com/api/v1`
+
+### Auth — `/api/v1/auth`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/` | Register (sends OTP) | ❌ |
+| POST | `/verify-otp` | Verify OTP + create account | ❌ |
+| POST | `/login` | Login | ❌ |
+| POST | `/resend-otp` | Resend registration OTP | ❌ |
+| POST | `/forgot-password` | Send reset OTP | ❌ |
+| POST | `/verify-reset-otp` | Verify OTP + reset password | ❌ |
+| POST | `/refresh` | Refresh access token | ❌ |
+| GET | `/me` | Get current user | ✅ |
+| PATCH | `/` | Update user name/avatar | ✅ |
+| POST | `/reset-password` | Change password | ✅ |
+| PATCH | `/delete-profile/:id` | Soft delete account | ✅ |
+| PATCH | `/block-user/:id` | Block/unblock user (admin) | ✅ Admin |
+
+### Profile — `/api/v1/profile`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/` | Create profile | ✅ |
+| PATCH | `/` | Update profile | ✅ |
+| GET | `/` | Browse profiles (search + filter) | ✅ |
+| GET | `/my` | Get my profile + completion % | ✅ |
+| GET | `/:userId` | Get profile by user ID | ✅ |
+
+**Query filters for GET `/`:**
+`search`, `division`, `district`, `thana`, `faith`, `practiceLevel`, `personality`, `habits`, `minAge`, `maxAge`, `minHeight`, `maxHeight`, `educationVariety`, `page`, `limit`
+
+### Chat — `/api/v1/chat`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/conversations` | Get all conversations | ✅ |
+| GET | `/:userId` | Get chat history with a user | ✅ |
+
+**Socket.IO Events:**
+
+| Event (emit) | Payload | Description |
 |---|---|---|
-| `send-message` | `{ receiverId, message, type }` | Send message (Premium only) |
+| `send-message` | `{ receiverId, message, type }` | Send a message (premium only) |
 | `typing` | `{ toUserId }` | Typing indicator |
 | `stop-typing` | `{ toUserId }` | Stop typing |
 | `seen` | `{ messageId }` | Mark message as seen |
 
-### Listen (Server → Client)
+| Event (on) | Description |
+|---|---|
+| `receive-message` | New message received |
+| `message-sent` | Message delivery confirmation |
+| `message-seen` | Message seen by receiver |
+| `new-notification` | Real-time notification |
+| `user-online` | User came online |
+| `user-offline` | User went offline |
+| `online-users` | List of current online users |
 
-| Event | Payload | Description |
-|---|---|---|
-| `receive-message` | message object | New incoming message |
-| `message-sent` | message object | Confirmation of sent message |
-| `message-seen` | `{ messageId, conversationWith }` | Message read receipt |
-| `typing` | `{ fromUserId }` | Someone is typing |
-| `stop-typing` | `{ fromUserId }` | Stopped typing |
-| `user-online` | userId | User came online |
-| `user-offline` | `{ userId, lastSeen }` | User went offline |
-| `online-users` | userId[] | Currently online users |
-| `new-notification` | notification object | Real-time notification |
-| `pending-notifications` | notification[] | Unread notifications on connect |
+### Likes — `/api/v1/likes`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/:userId` | Toggle like / unlike | ✅ |
+| GET | `/count/:userId` | Get like count | ✅ |
+| GET | `/my-likes` | Profiles I liked | ✅ |
+| GET | `/who-liked-me` | Who liked me (Premium only) | ✅ Premium |
+
+### Notifications — `/api/v1/notifications`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/` | Get my notifications | ✅ |
+| GET | `/unread-count` | Get unread count | ✅ |
+| PATCH | `/mark-all-read` | Mark all as read | ✅ |
+| PATCH | `/:id/read` | Mark one as read | ✅ |
+| DELETE | `/:id` | Delete notification | ✅ |
+
+### Subscriptions — `/api/v1/subscriptions`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/plans` | Get subscription plans | ❌ |
+| GET | `/currency` | Detect user currency | ❌ |
+| POST | `/initiate` | Start payment | ✅ |
+| GET | `/my` | My active subscription | ✅ |
+| GET | `/history` | Payment history | ✅ |
+
+**Plans:**
+- `1month` — ৳299
+- `3month` — ৳799
+- `6month` — ৳1499
+
+### Album — `/api/v1/album`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/add` | Add photo | ✅ |
+| GET | `/` | Get my album | ✅ |
+| GET | `/:userId` | Get user album | ✅ |
+| PATCH | `/:photoId` | Update photo caption | ✅ |
+| DELETE | `/delete/:photoId` | Delete photo | ✅ |
+
+### Block — `/api/v1/block`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/:userId` | Toggle block/unblock | ✅ |
+| GET | `/` | My block list | ✅ |
+| GET | `/status/:userId` | Check block status | ✅ |
+
+### Ignore — `/api/v1/ignore`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/:userId` | Toggle ignore | ✅ |
+| GET | `/` | My ignore list | ✅ |
+| GET | `/status/:userId` | Check ignore status | ✅ |
+| GET | `/conversations` | Ignored conversation list | ✅ |
+| GET | `/messages/:senderId` | Ignored messages from a user | ✅ |
+| DELETE | `/messages/:senderId` | Delete ignored messages | ✅ |
+
+### Report — `/api/v1/report`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/:userId` | Submit report | ✅ |
+| GET | `/my` | My submitted reports | ✅ |
+| GET | `/` | All reports (admin) | ✅ Admin |
+| PATCH | `/:id/status` | Update report status (admin) | ✅ Admin |
+
+### Profile Visits — `/api/v1/profile-visits`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/count` | My visit count | ✅ |
+| GET | `/` | Who visited me (Premium only) | ✅ Premium |
+
+### Dream Partner — `/api/v1/dream-partner`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/` | Save preferences | ✅ |
+| GET | `/` | Get matched profiles | ✅ |
+
+### Personality Test — `/api/v1/personality-test`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/questions` | Get all questions | ❌ |
+| POST | `/submit` | Submit answers | ❌ |
+| GET | `/:id` | Get result by ID | ❌ |
+| PATCH | `/:id` | Add name/email to result | ❌ |
+
+### Geo — `/api/v1/geo`
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| GET | `/divisions` | All divisions | ❌ |
+| GET | `/divisions/:id/districts` | Districts by division | ❌ |
+| GET | `/districts/:id/thanas` | Thanas by district | ❌ |
+| GET | `/universities` | Universities (filter by type/search) | ❌ |
+
+### Email Campaigns — `/api/v1/emails` (Admin only)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/send` | Send campaign |
+| POST | `/preview` | Preview recipients |
+| GET | `/users/search` | Search users |
+| GET | `/stats` | Email stats |
+| GET | `/` | All campaigns |
+| GET | `/:id` | Single campaign |
 
 ---
 
-## ⚙️ Subscription Plans
+## Rate Limits
 
-| Plan | Duration | Price (BDT) |
-|---|---|---|
-| 1 Month | 30 days | ৳299 |
-| 3 Months | 90 days | ৳799 |
-| 6 Months | 180 days | ৳1,499 |
-
-> International users see approximate GBP prices. Actual charge is in BDT via EPS gateway.
+| Limiter | Limit | Applied To |
+|---------|-------|------------|
+| Global | 500 / 15 min per IP | All routes |
+| Login | 5 / 15 min per IP+identifier | POST /auth/login |
+| Register | 5 / 15 min per IP | POST /auth/ |
+| OTP | 5 / 10 min per IP+phone | OTP routes |
+| Forgot Password | 5 / 1 hour per IP | POST /auth/forgot-password |
+| Profile Search | 60 / min per user | GET /profile |
+| Like | 30 / min per user | POST /likes/:userId |
+| Album | 20 / 15 min per user | Album write routes |
+| Report | 5 / hour per user | POST /report/:userId |
+| Payment | 10 / hour per user | POST /subscriptions/initiate |
 
 ---
 
-## ⏰ Cron Jobs
+## Redis Key Patterns
+
+| Key | TTL | Purpose |
+|-----|-----|---------|
+| `user:{userId}` | 5 min | Auth middleware user cache |
+| `myprofile:{userId}` | 5 min | getMyProfile cache |
+| `profile:{userId}` | 10 min | Like service profile cache |
+| `like:count:{userId}` | 5 min | Like count cache |
+| `like:senders:{userId}` | 5 min | Who liked me cache |
+| `like:given:{userId}` | 5 min | My likes cache |
+| `notif:unread:{userId}` | 30 sec | Unread notification count |
+| `geo:ip:{ip}` | 24 hr | IP geolocation cache |
+| `fx:rate:BDT:GBP` | 6 hr | Exchange rate cache |
+| `sub:reminder:{userId}` | 25 hr | Subscription reminder dedup |
+| `onlineUsers` | Hash | Active socket connections |
+| `refresh:{userId}` | 30 days | Refresh token |
+| `blacklist:{jti}` | Remaining TTL | Blacklisted access tokens |
+| `rl:*` | Window TTL | Rate limiter counters |
+
+---
+
+## Cron Jobs
 
 | Job | Schedule | Description |
-|---|---|---|
-| Subscription Expiry | Daily 00:01 | Marks expired subscriptions, resets users to `free` |
-| Expiry Reminder | Daily 10:00 | Notifies users with 1–2 days left |
+|-----|----------|-------------|
+| Subscription expiry | Daily 00:01 | Expire active subscriptions, set users to free |
+| Expiry reminder | Daily 10:00 | Notify users with 1-2 days left |
 
 ---
 
-## 🔑 Auth Flow
+## Performance
 
-```
-Register → OTP verify → Account created + Access Token issued
-Login → Password check → Access Token + Refresh Token
-Refresh → POST /auth/refresh with userId + refreshToken → New tokens
-Logout → Access token blacklisted in Redis + Refresh token revoked
-```
+After optimizations (Render.com deployment):
 
-**Token Storage (Redis):**
-```
-refresh:<userId>     → refresh token (30 days TTL)
-blacklist:<jti>      → blacklisted access token (TTL = remaining expiry)
-user:<userId>        → cached user data (5 min TTL)
-```
+| Metric | Before | After |
+|--------|--------|-------|
+| Concurrent users | 5–10 | 100–200 |
+| HTTP failure rate | 67% | < 2% |
+| getMyProfile p95 | 2,017 ms | ~50 ms (Redis cache) |
+| conversations p95 | 1,098 ms | ~300 ms (aggregation) |
+| Login p95 | 67 ms | 67 ms |
+| MongoDB connection pool | 5 (default) | 200 |
 
----
-
-## 📝 Future TODOs
-
-- [ ] Payment idempotency key (prevent double-click duplicate payments)
-- [ ] EPS production URL switch (currently sandbox)
-- [ ] Image upload via Cloudinary / S3 (currently URL-based)
-- [ ] Admin dashboard endpoints
-- [ ] SMS OTP integration (currently returns OTP in response — dev only)
+**Key optimizations applied:**
+- Redis cache on `getMyProfile` (5 min TTL)
+- `conversations` — replaced `populate()` with `$lookup` aggregation
+- MongoDB `maxPoolSize: 200`
+- HTTP response compression (gzip)
+- Compound indexes on all heavy query fields
+- `getUnreadCount` Redis cache (30 sec TTL)
+- DreamPartner aggregation — `$match` before `$lookup`
 
 ---
 
-## 📄 License
+## Deployment (Render.com)
+
+1. Push code to GitHub
+2. Render.com → New Web Service → connect repo
+3. **Build Command:** `npm install && npm run build`
+4. **Start Command:** `node dist/server.js`
+5. Add all environment variables from `.env`
+6. Deploy
+
+> **Important:** Do not deploy on Vercel. Vercel is serverless and does not support persistent Express.js connections or Socket.IO.
+
+---
+
+## License
 
 MIT

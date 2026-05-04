@@ -12,11 +12,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.NotificationService = void 0;
+exports.NotificationService = exports.invalidateUnreadCache = void 0;
+// src/app/modules/notification/notification.service.ts — OPTIMIZED
+// EXTRA CHANGE: unreadCount Redis cache যোগ করা হয়েছে
+// প্রতিটা page load এ unreadCount DB query হয় — এখন cache করা হবে
 const http_status_codes_1 = require("http-status-codes");
 const AppError_1 = __importDefault(require("../../../helpers/AppError"));
 const notification_model_1 = require("./notification.model");
-// ─── Message Templates ────────────────────────────────────────────────────────
+const redis_1 = __importDefault(require("../../../utils/redis"));
+const UNREAD_CACHE_KEY = (userId) => `notif:unread:${userId}`;
+const UNREAD_CACHE_TTL = 30; // 30 seconds — notification আসলে invalidate হবে
+// unread cache invalidate করার helper
+const invalidateUnreadCache = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        yield redis_1.default.del(UNREAD_CACHE_KEY(userId));
+    }
+    catch (_) { }
+});
+exports.invalidateUnreadCache = invalidateUnreadCache;
 const getNotificationMessage = (type, senderName, metadata) => {
     var _a;
     switch (type) {
@@ -28,44 +41,30 @@ const getNotificationMessage = (type, senderName, metadata) => {
             return `${senderName} visited your profile`;
         case "subscription_expiry_reminder":
             return (metadata === null || metadata === void 0 ? void 0 : metadata.daysLeft) === 1
-                ? `Your Premium subscription expires tomorrow (${(metadata === null || metadata === void 0 ? void 0 : metadata.endDate) ? new Date(metadata.endDate).toLocaleDateString("en-US") : ""}). Renew now.`
-                : `Your Premium subscription ${(_a = metadata === null || metadata === void 0 ? void 0 : metadata.daysLeft) !== null && _a !== void 0 ? _a : ""} days left.`;
+                ? `Your Premium subscription expires tomorrow. Renew now.`
+                : `Your Premium subscription has ${(_a = metadata === null || metadata === void 0 ? void 0 : metadata.daysLeft) !== null && _a !== void 0 ? _a : ""} days left.`;
         default:
             return "You have a new notification";
     }
 };
-// ─── Create & Deliver ─────────────────────────────────────────────────────────
-const createAndDeliver = (_a) => __awaiter(void 0, [_a], void 0, function* ({ io, redisClient, recipientId, senderId, senderName, type, metadata = {}, customMessage, }) {
+const createAndDeliver = (_a) => __awaiter(void 0, [_a], void 0, function* ({ io, redisClient: rc, recipientId, senderId, senderName, type, metadata = {}, customMessage, }) {
     const message = customMessage !== null && customMessage !== void 0 ? customMessage : getNotificationMessage(type, senderName, metadata);
-    // ─── DB তে save করো (offline support) ────────────────────────────────────
     const notification = yield notification_model_1.Notification.create({
-        recipientId,
-        senderId,
-        type,
-        message,
-        isRead: false,
-        metadata,
+        recipientId, senderId, type, message, isRead: false, metadata,
     });
-    // ─── Debug logs ───────────────────────────────────────────────────────────
-    console.log("🔔 Checking socket for recipientId:", recipientId);
-    const receiverSocketId = yield redisClient.hGet("onlineUsers", recipientId);
-    console.log("🔔 Found socketId:", receiverSocketId);
-    // ─── Receiver online থাকলে emit করো ──────────────────────────────────────
+    // unread cache invalidate — নতুন notification আসলে count বদলায়
+    yield (0, exports.invalidateUnreadCache)(recipientId);
+    const receiverSocketId = yield rc.hGet("onlineUsers", recipientId);
     if (receiverSocketId) {
         io.to(String(receiverSocketId)).emit("new-notification", {
             _id: notification._id,
-            type,
-            message,
-            senderId,
-            senderName,
-            metadata,
+            type, message, senderId, senderName, metadata,
             isRead: false,
             createdAt: notification.createdAt,
         });
     }
     return notification;
 });
-// ─── Get My Notifications ─────────────────────────────────────────────────────
 const getMyNotifications = (userId_1, ...args_1) => __awaiter(void 0, [userId_1, ...args_1], void 0, function* (userId, page = 1, limit = 20) {
     const skip = (page - 1) * limit;
     const [notifications, total, unreadCount] = yield Promise.all([
@@ -80,45 +79,48 @@ const getMyNotifications = (userId_1, ...args_1) => __awaiter(void 0, [userId_1,
     ]);
     return {
         notifications,
-        meta: {
-            total,
-            unreadCount,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-        },
+        meta: { total, unreadCount, page, limit, totalPages: Math.ceil(total / limit) },
     };
 });
-// ─── Mark Single as Read ──────────────────────────────────────────────────────
 const markAsRead = (notificationId, userId) => __awaiter(void 0, void 0, void 0, function* () {
     const notification = yield notification_model_1.Notification.findOneAndUpdate({ _id: notificationId, recipientId: userId }, { isRead: true }, { new: true });
-    if (!notification) {
+    if (!notification)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Notification not found");
-    }
+    yield (0, exports.invalidateUnreadCache)(userId);
     return notification;
 });
-// ─── Mark All as Read ─────────────────────────────────────────────────────────
 const markAllAsRead = (userId) => __awaiter(void 0, void 0, void 0, function* () {
     yield notification_model_1.Notification.updateMany({ recipientId: userId, isRead: false }, { isRead: true });
+    yield (0, exports.invalidateUnreadCache)(userId);
     return { message: "All notifications marked as read" };
 });
-// ─── Delete a Notification ────────────────────────────────────────────────────
 const deleteNotification = (notificationId, userId) => __awaiter(void 0, void 0, void 0, function* () {
     const notification = yield notification_model_1.Notification.findOneAndDelete({
-        _id: notificationId,
-        recipientId: userId,
+        _id: notificationId, recipientId: userId,
     });
-    if (!notification) {
+    if (!notification)
         throw new AppError_1.default(http_status_codes_1.StatusCodes.NOT_FOUND, "Notification not found");
-    }
+    yield (0, exports.invalidateUnreadCache)(userId);
     return { message: "Notification deleted" };
 });
-// ─── Get Unread Count ─────────────────────────────────────────────────────────
+// EXTRA CHANGE: getUnreadCount এ Redis cache
+// প্রতিটা page load এ এই endpoint hit হয় — cache করলে DB load অনেক কমবে
 const getUnreadCount = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    // Cache check
+    try {
+        const cached = yield redis_1.default.get(UNREAD_CACHE_KEY(userId));
+        if (cached !== null)
+            return { unreadCount: parseInt(cached) };
+    }
+    catch (_) { }
     const count = yield notification_model_1.Notification.countDocuments({
-        recipientId: userId,
-        isRead: false,
+        recipientId: userId, isRead: false,
     });
+    // Cache store
+    try {
+        yield redis_1.default.setEx(UNREAD_CACHE_KEY(userId), UNREAD_CACHE_TTL, count.toString());
+    }
+    catch (_) { }
     return { unreadCount: count };
 });
 exports.NotificationService = {
