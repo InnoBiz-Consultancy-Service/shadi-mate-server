@@ -1,4 +1,4 @@
-// profile.service.ts — OPTIMIZED
+// profile.service.ts — FULLY FIXED with height null safety
 import AppError from "../../../helpers/AppError";
 import { StatusCodes } from "http-status-codes";
 import { Profile } from "./profile.model";
@@ -9,23 +9,44 @@ import { invalidateProfileCache } from "../like/like.servce";
 import { calculateCompletionPercentage, getCompletionLabel } from "./profileCompletaion";
 import { Types } from "mongoose";
 import { DreamPartnerService } from "../dreamPartner/dreamPartner.service";
-import { toDisplayHeight } from "../../../utils/heightConverter";
+import { toDisplayHeight, isValidHeight, getHeightCmForAggregation } from "../../../utils/heightConverter";
 import redisClient from "../../../utils/redis";
 
-// ─── CHANGE 3: Redis Cache Keys for getMyProfile ──────────────────────────────
-// getMyProfile ছিল p95 = 2017ms। এখন cache থেকে দিলে ~5ms হবে।
-// key pattern: myprofile:userId
-// TTL: 5 minutes (300s) — profile বেশি change হয় না, 5 min stale safe
+// ─── Redis Cache Keys ──────────────────────────────────────────────
 const MY_PROFILE_CACHE_KEY = (userId: string) => `myprofile:${userId}`;
 const MY_PROFILE_CACHE_TTL = 60 * 5; // 5 minutes
 
-// ─── Cache invalidate helper (update/create profile এ call করো) ───────────────
+// ─── Cache invalidate helper ───────────────────────────────────────
 export const invalidateMyProfileCache = async (userId: string) => {
     try {
         await redisClient.del(MY_PROFILE_CACHE_KEY(userId));
     } catch (_) { /* silent fail */ }
 };
 
+// ─── Helper: safe height conversion with null handling ────────────
+const safeConvertHeight = (height: any): string | null | undefined => {
+    // null, undefined, empty string check
+    if (!height || height === null || height === undefined || height === "") {
+        return undefined;
+    }
+    
+    // যদি ইতিমধ্যে valid format এ থাকে
+    if (typeof height === 'string' && height.includes('ft') && height.includes('in')) {
+        return height;
+    }
+    
+    // Convert using the utility
+    const converted = toDisplayHeight(height);
+    
+    // Validate conversion result
+    if (converted && isValidHeight(converted)) {
+        return converted;
+    }
+    
+    return undefined;
+};
+
+// ─── Helper: check profile completion ──────────────────────────────
 const checkProfileCompletion = (profile: any) => {
     return !!(
         profile.gender &&
@@ -40,13 +61,20 @@ const checkProfileCompletion = (profile: any) => {
     );
 };
 
-// ─── Create Profile ───────────────────────────────────────────────────────────
+// ─── Create Profile ────────────────────────────────────────────────
 const createProfile = async (userId: string, payload: any) => {
     if (!userId) throw new AppError(StatusCodes.BAD_REQUEST, "User ID is required");
 
     let processedPayload = { ...payload };
-    if (payload.height !== undefined && payload.height !== null) {
-        processedPayload.height = toDisplayHeight(payload.height);
+    
+    // ✅ FIX: null height skip করে conversion
+    if (payload.height !== undefined && payload.height !== null && payload.height !== "") {
+        const convertedHeight = safeConvertHeight(payload.height);
+        if (convertedHeight) {
+            processedPayload.height = convertedHeight;
+        } else {
+            delete processedPayload.height; // invalid height হলে skip
+        }
     }
 
     const profile = await Profile.create({ ...processedPayload, userId });
@@ -54,10 +82,9 @@ const createProfile = async (userId: string, payload: any) => {
     const completed = checkProfileCompletion(profile);
     await User.findByIdAndUpdate(userId, { isProfileCompleted: completed });
 
-    // ─── Caches invalidate করো ────────────────────────────────────────────────
     await Promise.all([
         invalidateProfileCache(userId),
-        invalidateMyProfileCache(userId),    // ← NEW: myprofile cache
+        invalidateMyProfileCache(userId),
     ]);
 
     try {
@@ -69,12 +96,22 @@ const createProfile = async (userId: string, payload: any) => {
     return profile;
 };
 
-// ─── Update Profile ───────────────────────────────────────────────────────────
+// ─── Update Profile ────────────────────────────────────────────────
 const updateProfile = async (userId: string, payload: any) => {
     const updateData = { ...payload };
 
-    if (payload.height !== undefined && payload.height !== null) {
-        updateData.height = toDisplayHeight(payload.height);
+    // ✅ FIX: null height skip করে conversion
+    if (payload.height !== undefined) {
+        if (payload.height === null || payload.height === "") {
+            delete updateData.height; // null পাঠালে update করো না
+        } else {
+            const convertedHeight = safeConvertHeight(payload.height);
+            if (convertedHeight) {
+                updateData.height = convertedHeight;
+            } else {
+                delete updateData.height;
+            }
+        }
     }
 
     Object.keys(updateData).forEach((key) => {
@@ -89,13 +126,12 @@ const updateProfile = async (userId: string, payload: any) => {
 
     if (!profile) throw new AppError(StatusCodes.NOT_FOUND, "Profile not found");
 
-    // ─── Update করলে cache invalidate ────────────────────────────────────────
-    await invalidateMyProfileCache(userId);   // ← NEW
+    await invalidateMyProfileCache(userId);
 
     return profile;
 };
 
-// ─── Get Profiles (Search + Filter) ──────────────────────────────────────────
+// ─── Get Profiles (Search + Filter) ────────────────────────────────
 const getProfiles = async (
     query: QueryParams & {
         minAge?: number; maxAge?: number;
@@ -140,15 +176,22 @@ const getProfiles = async (
     if (personality)      builder.addMatch("personality",                  personality);
     if (habits?.length)   builder.addMatch("habits",                       { $in: habits });
 
+    // ✅ FIXED: null safety for height conversion in aggregation
     if (minHeight !== undefined || maxHeight !== undefined) {
         builder.addProject({
             heightCm: {
                 $cond: {
-                    if: { $ne: ["$height", null] },
+                    if: { $and: [
+                        { $ne: ["$height", null] },
+                        { $ne: ["$height", ""] },
+                        { $ne: ["$height", undefined] },
+                        { $ne: ["$height", "null"] }
+                    ]},
                     then: {
                         $toInt: {
                             $arrayElemAt: [
-                                { $split: [{ $arrayElemAt: [{ $split: ["$height", " - "] }, 1] }, "cm"] }, 0
+                                { $split: [{ $arrayElemAt: [{ $split: ["$height", " - "] }, 1] }, "cm"] },
+                                0
                             ]
                         }
                     },
@@ -200,25 +243,21 @@ const getProfiles = async (
     return results;
 };
 
-// ─── CHANGE 3 (main): getMyProfile with Redis Cache ──────────────────────────
-// আগে: প্রতিবার DB hit → 4-5 queries → p95 = 2017ms
-// এখন: Redis cache → p95 = 5-20ms (cache hit)
-// Cache miss হলে DB থেকে fetch করে cache এ store করে
+// ─── Get My Profile (with Redis Cache) ─────────────────────────────
 const getMyProfile = async (userId: string) => {
     if (!userId) throw new AppError(StatusCodes.BAD_REQUEST, "User ID is required");
 
-    // ─── Step 1: Redis cache check ────────────────────────────────────────────
+    // Step 1: Redis cache check
     try {
         const cached = await redisClient.get(MY_PROFILE_CACHE_KEY(userId));
         if (cached) {
-            // Cache hit — সরাসরি return করো, DB touch হবে না
             return JSON.parse(cached);
         }
     } catch (_) {
-        // Redis fail করলে DB fallback — app crash হবে না
+        // Redis fail করলে DB fallback
     }
 
-    // ─── Step 2: DB থেকে fetch (cache miss) ──────────────────────────────────
+    // Step 2: DB থেকে fetch
     const [profile, user] = await Promise.all([
         Profile.findOne({ userId })
             .populate("userId",              "name phone email gender")
@@ -237,13 +276,13 @@ const getMyProfile = async (userId: string) => {
         ...profile,
         completionPercentage: completion.percentage,
         completionLabel:      getCompletionLabel(completion.percentage),
-        missingFields:        completion.missingFields.map((f) => ({
+        missingFields:        completion.missingFields.map((f: any) => ({
             key:   f.key,
             label: f.label,
         })),
     };
 
-    // ─── Step 3: Redis এ cache করো ────────────────────────────────────────────
+    // Step 3: Redis এ cache
     try {
         await redisClient.setEx(
             MY_PROFILE_CACHE_KEY(userId),
@@ -251,13 +290,14 @@ const getMyProfile = async (userId: string) => {
             JSON.stringify(result)
         );
     } catch (_) {
-        // Cache store fail হলেও result return করো
+        // Cache fail হলেও result return করো
     }
 
     return result;
 };
 
-export const getProfileByUserIdFromDB = async (userId: string) => {
+// ─── Get Profile By User ID ────────────────────────────────────────
+const getProfileByUserIdFromDB = async (userId: string) => {
     if (!Types.ObjectId.isValid(userId)) {
         throw new AppError(StatusCodes.BAD_REQUEST, "Invalid user ID");
     }
